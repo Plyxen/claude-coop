@@ -1,6 +1,6 @@
 {
   "name": "claude-code-multi-pc",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Run Claude Code across multiple PCs and Claude accounts: one lead Claude hands tasks to worker Claudes on your friends' computers, and every Claude sees what the crew is doing.",
   "type": "module",
   "bin": {

@@ -3,7 +3,7 @@
 // code runs on Cloudflare Workers (cloudflare.js) and on Node (node.js).
 import { SCHEMA } from './schema.js'
 
-export const VERSION = '0.1.3'
+export const VERSION = '0.1.4'
 
 const ONLINE_MS = 90_000
 const SEEN_WRITE_MS = 30_000

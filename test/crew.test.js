@@ -2,7 +2,8 @@
 // each driven the way Claude Code drives it (stdio MCP client).
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { VERSION } from '../src/hub/app.js'
 import { startNodeHub } from '../src/hub/node.js'
 
 const BIN = fileURLToPath(new URL('../bin/coop.js', import.meta.url))
@@ -208,6 +210,37 @@ test('coop start builds the right claude command line', async () => {
   const lead = await coop('start', '--profile', 'boss', '--dry-run', '--claude', 'claude', '--', '--model', 'opus')
   assert.doesNotMatch(lead, /--permission-mode/)
   assert.match(lead.trim(), /--model opus$/)
+})
+
+test('coop start reopens the same Claude session instead of adding new ones', async () => {
+  const claudeHome = mkdtempSync(join(tmpdir(), 'coop-claude-'))
+  const start = (...extra) => coopWith({ CLAUDE_CONFIG_DIR: claudeHome }, 'start', '--profile', 'bob', '--dry-run', '--claude', 'claude', ...extra)
+  const idAfter = (flag, text) => new RegExp(`${flag} ([0-9a-f-]{36})`).exec(text)?.[1]
+  // What a real coop start remembers, next to a transcript Claude Code would have written.
+  const id = randomUUID()
+  mkdirSync(join(claudeHome, 'projects', 'some-folder'), { recursive: true })
+  writeFileSync(join(claudeHome, 'projects', 'some-folder', `${id}.jsonl`), '')
+  mkdirSync(join(home, 'run'), { recursive: true })
+  const remember = (fields = {}) => writeFileSync(join(home, 'run', 'bob.session.json'), JSON.stringify({ id, cwd: process.cwd(), version: VERSION, ...fields }))
+  try {
+    assert.ok(idAfter('--session-id', await start()), 'nothing remembered: a new session')
+    remember()
+    assert.equal(idAfter('--resume', await start()), id)
+    const fresh = idAfter('--session-id', await start('--new'))
+    assert.ok(fresh && fresh !== id, '--new starts a fresh session')
+    remember({ version: '0.0.1' })
+    assert.ok(idAfter('--session-id', await start()), 'after an update: a new session')
+    remember({ id: randomUUID() })
+    assert.ok(idAfter('--session-id', await start()), 'no transcript left: a new session')
+    remember({ pid: process.pid })
+    const open = await start()
+    assert.match(open, /still looks open/)
+    assert.ok(idAfter('--session-id', open), 'never two windows on one session')
+    remember()
+    assert.doesNotMatch(await start('--', '--continue'), /--session-id|--resume /, 'your own session flags win')
+  } finally {
+    rmSync(claudeHome, { recursive: true, force: true })
+  }
 })
 
 test('coop update compares with the latest version and leaves git clones to git', async () => {

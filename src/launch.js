@@ -1,15 +1,19 @@
 // `coop start`: launch Claude Code with the coop server loaded as a channel,
 // so crew events reach the session while it sits idle.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { coopHome, writePrivate } from './config.js'
+import { VERSION } from './hub/app.js'
 import { WORKER_START_PROMPT, leadSystemPrompt, workerSystemPrompt } from './mcp/instructions.js'
 
 const COOP_BIN = fileURLToPath(new URL('../bin/coop.js', import.meta.url))
 const PERMISSION_MODES = ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan']
+// Claude Code options that choose the session themselves.
+const SESSION_FLAGS = ['--resume', '-r', '--continue', '-c', '--session-id', '--fork-session', '--from-pr', '--teleport']
 
 export function findClaude() {
   if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN
@@ -32,7 +36,7 @@ export function claudeVersion(bin) {
 // Build the claude command line for a profile. Option order matters: the
 // list-valued options (--mcp-config, --dangerously-load-development-channels)
 // are followed by another option, so the start prompt stays positional.
-export function buildClaudeArgs(profile, { permissionMode, worktree = false, relay = true, prompt, extraArgs = [] } = {}) {
+export function buildClaudeArgs(profile, { permissionMode, worktree = false, relay = true, prompt, session = null, extraArgs = [] } = {}) {
   const mcpConfigPath = join(coopHome(), 'run', `${profile.name}.mcp.json`)
   const env = { COOP_LAUNCHED: '1', ...(relay ? {} : { COOP_RELAY_PERMISSIONS: '0' }) }
   if (process.env.COOP_HOME) env.COOP_HOME = process.env.COOP_HOME
@@ -53,6 +57,7 @@ export function buildClaudeArgs(profile, { permissionMode, worktree = false, rel
     '--name',
     `coop ${profile.role} ${profile.member}`,
   ]
+  if (session) args.push(session.resume ? '--resume' : '--session-id', session.id)
   if (mode) args.push('--permission-mode', mode)
   if (worktree) args.push('--worktree', `coop-${profile.member}`)
   args.push('--append-system-prompt', isWorker ? workerSystemPrompt(profile) : leadSystemPrompt(profile))
@@ -67,17 +72,70 @@ export function startClaude(profile, options = {}) {
   if (!bin) {
     throw new Error('Claude Code (the `claude` command) was not found. Install it (https://code.claude.com/docs/en/quickstart), or point CLAUDE_BIN at it.')
   }
-  const { args, mcpConfigPath, mcpConfig } = buildClaudeArgs(profile, options)
+  const session = pickSession(profile, options)
+  if (session?.note) console.log(session.note)
+  const { args, mcpConfigPath, mcpConfig } = buildClaudeArgs(profile, { ...options, session })
   if (options.dryRun) return { bin, args }
   writePrivate(mcpConfigPath, `${JSON.stringify(mcpConfig, null, 2)}\n`)
+  const record = session && { id: session.id, cwd: process.cwd(), version: VERSION }
+  if (record) writePrivate(sessionFile(profile), `${JSON.stringify({ ...record, pid: process.pid })}\n`)
   const child = runClaude(bin, args)
   return new Promise((resolve) => {
-    child.on('exit', (code) => resolve(code ?? 0))
+    child.on('exit', (code) => {
+      if (record) writePrivate(sessionFile(profile), `${JSON.stringify(record)}\n`)
+      resolve(code ?? 0)
+    })
     child.on('error', (error) => {
       console.error(`Couldn't start ${bin}: ${error.message}`)
       resolve(1)
     })
   })
+}
+
+// One Claude Code session per crew and folder: `coop start` reopens it
+// instead of adding another session every time. A new coop version gets a new
+// session, because a resumed session keeps the system prompt (and so the coop
+// instructions) it started with.
+export function pickSession(profile, { fresh = false, worktree = false, extraArgs = [] } = {}) {
+  if (worktree || extraArgs.some((arg) => SESSION_FLAGS.includes(arg.split('=')[0]))) return null
+  const last = readJson(sessionFile(profile))
+  const fits = last && last.cwd === process.cwd() && last.version === VERSION && transcriptExists(last.id)
+  if (fresh || !fits) return { id: randomUUID(), resume: false }
+  if (last.pid && last.pid !== process.pid && isRunning(last.pid)) {
+    return { id: randomUUID(), resume: false, note: 'Your last coop session for this crew still looks open in another window, so this starts a new one.' }
+  }
+  return { id: last.id, resume: true }
+}
+
+function sessionFile(profile) {
+  return join(coopHome(), 'run', `${profile.name}.session.json`)
+}
+
+function readJson(file) {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+// Claude Code keeps each conversation in <config dir>/projects/<folder>/<id>.jsonl.
+function transcriptExists(id) {
+  const projects = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'projects')
+  try {
+    return readdirSync(projects).some((dir) => existsSync(join(projects, dir, `${id}.jsonl`)))
+  } catch {
+    return false
+  }
+}
+
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error.code === 'EPERM'
+  }
 }
 
 // .cmd and .bat files (npm-installed claude on Windows) only run through the

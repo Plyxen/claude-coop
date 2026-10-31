@@ -35,7 +35,7 @@ Claude Code starts in that folder, connected to the crew:
 1. **First time in this folder:** Claude Code asks whether you trust it. Choose yes.
 2. **Every start:** a warning about *development channels* appears, because claude-code-multi-pc isn't on Anthropic's channel allowlist during the research preview. Choose **I am using this for local development**.
 
-After that your Claude checks the board, claims anything assigned to it, and then waits. New tasks arrive by themselves. Minimize the window, but don't close it: closing it stops your worker until you run `coop start` again. Tasks wait on the hub in the meantime.
+After that your Claude checks the board, claims anything assigned to it, and then waits. New tasks arrive by themselves. Minimize the window, but don't close it: closing it stops your worker until you run `coop start` again. Tasks wait on the hub in the meantime, and `coop start` picks up the same session where it left off (`coop start --new` starts a fresh one).
 
 Keep your PC awake while it works. On Windows, set Settings > System > Power > Sleep to "Never" while plugged in.
 

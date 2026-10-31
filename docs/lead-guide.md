@@ -38,6 +38,8 @@ This is your normal Claude Code with the crew connected. Work with it as usual, 
 
 Updates from the crew arrive in your session as they happen. Your Claude tells you about the ones that matter and answers routine questions from the workers itself.
 
+`coop start` reopens your last coop session in that folder, so your session list doesn't fill up with copies and your Claude remembers the earlier conversation. `coop start --new` starts a fresh one. After `coop update`, the next start is a new session, so the new version's instructions take effect.
+
 ## Writing tasks workers can do alone
 
 Workers start with none of your conversation, so the task is all they have. Good tasks say:

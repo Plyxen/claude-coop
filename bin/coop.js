@@ -31,8 +31,9 @@ Lead
 Everyone
   coop join --hub URL --token TOKEN [--profile NAME]
                                   Save a crew profile on this PC (tokens stay in ~/.claude-coop)
-  coop start [--permission-mode MODE] [--worktree] [--no-relay] [--prompt TEXT] [--dry-run] [-- CLAUDE ARGS]
-                                  Start Claude Code in this folder, connected to the crew
+  coop start [--new] [--permission-mode MODE] [--worktree] [--no-relay] [--prompt TEXT] [--dry-run] [-- CLAUDE ARGS]
+                                  Start Claude Code in this folder, connected to the crew. Reopens
+                                  your last coop session here; --new starts a fresh one
   coop status                     Show the crew board
   coop doctor                     Check this PC's setup
   coop update [--check]           Update coop to the latest version (--check: only look)
@@ -181,6 +182,7 @@ async function start(args) {
   const own = split === -1 ? args : args.slice(0, split)
   const extraArgs = split === -1 ? [] : args.slice(split + 1)
   const opts = options(own, {
+    new: { type: 'boolean' },
     'permission-mode': { type: 'string' },
     worktree: { type: 'boolean' },
     'no-relay': { type: 'boolean' },
@@ -191,6 +193,7 @@ async function start(args) {
   const { startClaude, commandLine } = await import('../src/launch.js')
   const profile = config.getProfile(opts.profile)
   const result = await startClaude(profile, {
+    fresh: opts.new,
     permissionMode: opts['permission-mode'],
     worktree: opts.worktree,
     relay: !opts['no-relay'],
@@ -269,7 +272,7 @@ async function update(args) {
   console.log(`Updating coop ${VERSION} to ${latest}: ${INSTALL_COMMAND}`)
   const { spawnSync } = await import('node:child_process')
   if (spawnSync(INSTALL_COMMAND, { stdio: 'inherit', shell: true }).status !== 0) throw new Error(`the update failed. Try it yourself: ${INSTALL_COMMAND}`)
-  console.log(`\nUpdated to ${latest}. Restart open coop sessions (close the window, then coop start) to use it.`)
+  console.log(`\nUpdated to ${latest}. Restart open coop sessions (close the window, then coop start) to use it; that starts a new session.`)
 }
 
 // The version on GitHub's main branch. COOP_UPDATE_URL points elsewhere in tests.

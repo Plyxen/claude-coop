@@ -199,6 +199,34 @@ test('workers: commands that get around the checks are refused', () => {
   }
 })
 
+test('workers: a deploy is caught however the tool is launched', () => {
+  const bad = ['wrangler deploy', 'npx wrangler deploy', 'npx wrangler@4 deploy', 'npx --yes wrangler@4 deploy', 'npx -y wrangler@latest deploy --env production', 'cd site && npx wrangler@4 deploy', 'wrangler --env production deploy', 'wrangler -c x.toml deploy', './node_modules/.bin/wrangler deploy', 'node_modules\\.bin\\wrangler.cmd deploy', 'pnpm dlx wrangler@4 deploy', 'bunx wrangler deploy', 'yarn wrangler deploy', 'npm exec -- wrangler deploy', 'npx wrangler@4 secret put X', 'npx wrangler@4 versions deploy', 'npx wrangler@4 pages deploy dist', 'npx wrangler@4 rollback', 'npx wrangler@4 delete', 'npx wrangler@4 d1 execute db --remote', 'npx wrangler@4 kv key put a b --binding X --remote', 'npm run deploy', 'yarn deploy', 'pnpm deploy', 'npx vercel@latest', 'npx netlify-cli deploy', 'npx npm@10 publish', 'npm --otp=1 publish']
+  for (const command of bad) assert.match(commandProblem(command, 'worker') ?? '', /deploys|publishes/, command)
+  for (const command of ['npx wrangler@4 dev --port 8788', 'npx --yes wrangler@4 dev', 'cd site && npx --yes wrangler@4 dev --port 8788', 'wrangler dev', 'npx wrangler@4 kv key list --binding X --local', 'npx wrangler@4 whoami', 'cat wrangler.toml', 'cat deploy.md', 'npm run demo', 'npm run build', 'npm test -- --alerts']) {
+    assert.equal(commandProblem(command, 'worker'), null, command)
+  }
+})
+
+test('workers: a program is caught wherever a shell would run it', () => {
+  const bad = ['aws s3 ls', 'AZ login', 'az', 'FOO=1 aws s3 ls', '/usr/bin/aws s3 ls', 'aws.exe s3 ls', 'C:\\tools\\az.cmd login', '"aws" s3 ls', "'az' login", 'git status; aws s3 ls', 'true && az login', 'true || helm list', 'x | aws s3 rm', 'sleep 1 & aws s3 ls', 'bash -c "aws s3 rm s3://x"', 'sh -c "az login"', "bash -lc 'az login'", 'powershell -NoProfile -Command "az login"', 'cmd /c "az login"', 'cmd /c az login', 'eval "wrangler deploy"', 'echo "az login" | sh', 'echo "az login" | bash', 'x=$(aws s3 ls)', 'echo "$(aws s3 ls)"', 'echo `aws s3 ls`', '(aws s3 ls)', '{ aws s3 ls; }', 'if true; then aws s3 ls; fi', 'for x in a; do az login; done', 'cat <<EOF | sh\naws s3 ls\nEOF', 'bash <<EOF\naz login\nEOF', `node -e "require('child_process').execSync('aws s3 ls')"`, `python -c "import os; os.system('aws s3 ls')"`, 'python <<EOF\nimport os; os.system("aws s3 ls")\nEOF', 'find . -exec aws s3 ls \\;', 'cat x | xargs aws s3 rm', 'sudo aws s3 ls', 'git commit -m "az foo" && aws s3 ls', 'grep "a b" x; sudo rm y', 'git push "--force" origin x', 'git push origin "main"', '"git" push "origin" "main"']
+  for (const command of bad) assert.ok(commandProblem(command, 'worker'), command)
+})
+
+test('workers: text a command only mentions is not what it runs', () => {
+  const fine = ['grep -rn "az email" src/', 'grep -rn "Add meg az email címed" src/i18n.js', 'git commit -m "Fix az email subject"', "git commit -m 'Az email tárgya'", `node -e "console.log('az ügyfél adatai')"`, 'gh issue create --title "Fordítás: az értesítő" --body "x"', 'grep -rn "aws " docs/', 'grep -rn "helm of" docs/', 'git commit -m "Remove sudo from the docs"', 'git commit -m "Explain wrangler deploy"', 'grep -rn "wrangler deploy" docs/', 'git commit -m "Never run git push --force"', 'git commit -m "Say git push origin main is refused"', 'gh pr create --title "Stop gh pr merge from workers" --body "x"', 'git commit -m "Stop using rm -rf ../x"', 'git commit -m "Fix \\`az login\\` in the docs"', 'echo az valami', 'grep az docs/x', 'grep -rn aws docs/', 'ls az', 'grep sudo docs/x', 'grep -rnE "aws|az|gcloud" docs/', "grep -E 'foo;sudo' docs/x", "git commit -m \"$(cat <<'EOF'\nAz email tárgya\n\nNever run aws s3 rm or sudo.\nEOF\n)\"", "gh pr create --fill --body \"$(cat <<'EOF'\naz login\nEOF\n)\"", "git commit -m @'\nAz email: don't\n'@", 'cat > notes.md <<EOF\naz login\nEOF']
+  for (const command of fine) assert.equal(commandProblem(command, 'worker'), null, command)
+})
+
+test('workers: what a delete names stays in the project', () => {
+  const problem = (command) => commandProblem(command, 'worker', { projectDir: project, cwd: project, home, temp: join(base, 'temp') })
+  const bad = ['rm -rf ../other', 'rm -fr ../other', 'rm -r ../other', 'rm --recursive --force ../other', 'rm -r -f ../other', 'rm ../file', 'rm -rf -- ../other', 'rm -rf src/../../other', 'rm -rf node_modules ../other', 'rm -rf "../my dir"', "rm -rf '../my dir'", 'rm -rf ../*', 'rm -rf /', 'rm -rf /etc', 'rm -rf ~', 'rm -rf ~/x', 'rm -rf $HOME/x', 'rm -rf "$HOME/x"', 'rm -rf ${HOME}/x', 'rm -rf %USERPROFILE%\\x', '/bin/rm -rf ../other', `rm -rf ${join(outside, 'x')}`, 'Remove-Item ..\\x -Recurse -Force', 'Remove-Item -Path ..\\x -Recurse', 'remove-item -recurse C:\\x', 'rd /s /q ..\\x', 'rmdir /s /q C:\\x', 'del /s /q ..\\x', 'bash -c "rm -rf ../other"', 'git rm -r ../other', 'cd src && rm -rf ../../other', 'rm -rf ~root/x', '\\rm -rf ../other', 'RM -RF ../other', 'command rm -rf ../other', 'rm -rf src/..\\..\\other', 'rm -rf "..\\other"']
+  for (const command of bad) assert.match(problem(command) ?? '', /deletes outside/, command)
+  const fine = ['rm -rf node_modules', 'rm -rf ./dist', 'rm -rf dist/*', 'rm -rf *', 'rm -f a.txt', 'rm -rf src/../dist', `rm -rf ${join(project, 'dist')}`, 'rm -rf "my dir"', 'rm -rf /tmp/x', 'rm -rf $TMPDIR/x', 'rm -rf "$tmp"', 'rm -rf $BUILD_DIR', 'rm -f a.txt 2>/dev/null', 'rm -f a.txt > /dev/null', 'Remove-Item dist -Recurse -Force', 'rd /s /q dist', 'del /q a.txt', 'npm rm left-pad', 'git rm -r src/old', 'git rm --cached a.txt']
+  for (const command of fine) assert.equal(problem(command), null, command)
+  assert.match(check({ tool_name: 'Bash', tool_input: { command: 'rm -rf ../outside/x' }, cwd: project }), /deletes outside/, 'the hook uses the real project folder')
+  assert.equal(check({ tool_name: 'Bash', tool_input: { command: 'rm -rf ../a.js' }, cwd: join(project, 'src') }), null, 'and the shell\'s own folder')
+})
+
 test('every Claude: nothing reaches credentials or turns the checks off', () => {
   const bad = ['cat ~/.claude-coop/config.json', 'type %USERPROFILE%\\.claude-coop\\config.json', 'cat ~/.ssh/id_rsa', 'cat ~/.aws/credentials', 'cat ~/.git-credentials', 'git credential fill', 'gh auth token', 'cmdkey /list', 'security find-generic-password -s x', 'claude --dangerously-skip-permissions -p x', 'claude --allow-dangerously-skip-permissions', 'claude --permission-mode bypassPermissions', 'claude --permission-mode=bypassPermissions', 'coop start --insecure-dev-mode', 'coop hub --reset-approval']
   for (const role of ['worker', 'lead']) {

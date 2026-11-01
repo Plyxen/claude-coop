@@ -78,6 +78,8 @@ The hub doesn't have that command yet. Update the hub first ([Cloudflare](deploy
 
 A worker's Claude tried something coop's check doesn't allow, and Claude sees the reason. Usually it's right to: it should find another way, or ask the lead. If it's blocking real work, such as a file the project keeps outside its folder, do that part yourself, or start the session from a higher folder. `coop audit --local` shows what's been blocked on this PC.
 
+A delete is checked from the folder the shell started in, so `cd src && rm -rf ../dist` is refused even though it stays in the project. Run it from the project folder instead.
+
 Every tool call blocked, with *could not check this*? Something's wrong with the coop install: run `coop doctor`, and `coop update` if needed.
 
 ## "coop guard stopped this push"

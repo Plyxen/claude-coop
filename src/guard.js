@@ -48,29 +48,84 @@ const SECRET_COMMANDS = [
   [/\bcmdkey\b|\bsecurity\s+find-(?:generic|internet)-password\b|\bsecret-tool\b/, "reads this PC's credential store"],
 ]
 
-// Command shapes workers never run. The real limits are the project's branch
-// protection and the worker's permission mode: these catch the common cases.
+// Files that change what the checks do. Named anywhere in a command, even in quotes.
 /** @type {[RegExp, string][]} */
-const WORKER_COMMANDS = [
+const CONTROL_COMMANDS = [
   [/\bgit\b[^\n;&|]*\s-c\s+core\.hookspath\b/, 'turns off git hooks'],
   [/\bgit\s+config\b[^\n;&|]*\bcore\.hookspath\b/, 'changes where git hooks live'],
-  [/\bgit\s+(?:\S+\s+)*push\b[^\n;&|]*--no-verify\b/, "skips coop's pre-push check"],
-  [/\bgit\s+(?:\S+\s+)*push\b[^\n;&|]*\s(?:--force(?!-with-lease)\b|-f\b|--mirror\b|--delete\b|-d\b|--tags\b|--all\b)/, 'is a destructive or bulk push'],
   [/\.git[\\/]hooks\b/, 'touches git hooks'],
   [/\.claude[\\/](?:settings|hooks)|>\s*\S*\.mcp\.json\b/, "changes Claude Code's settings or hooks"],
+]
+
+// Where a shell runs a program: first on a line, or after ; & | ( or a backtick,
+// past any NAME=value, shell keyword or launcher like npx. Its folder and its
+// version (wrangler@4) don't change what it is. A program's name alone is too
+// common a word to go on: `az` is also Hungarian for "the".
+const BEFORE_PROGRAM = String.raw`(?:^|[;&|(\x60]|\s-exec(?:dir)?\s)\s*["']?(?:(?:\w+=\S*|then|do|else|if|while|until|!|\{)\s+|(?:npx|bunx|env|command|exec|nohup|time|sudo|doas|xargs|(?:ba|z|da|k)?sh|pwsh|powershell|cmd|npm\s+exec|pnpm(?:\s+(?:dlx|exec))?|yarn(?:\s+dlx)?|bun(?:\s+x)?)(?:\.exe)?(?:\s+[-/]\S+)*\s+)*(?:\S*[\\/])?`
+const AFTER_PROGRAM = String.raw`(?:@\S*)?(?:\.(?:exe|cmd|bat|ps1))?(?=["'\s]|$)`
+const running = (names, rest = '') => new RegExp(`${BEFORE_PROGRAM}(?:${names})${AFTER_PROGRAM}${rest}`, 'm')
+
+// `wrangler@4 deploy`, `wrangler --env production deploy`. Local work like `wrangler dev` is fine.
+const WRANGLER_CHANGE = /\bwrangler(?:@\S*)?(?:\.cmd|\.exe)?(?:\s+-\S+(?:\s+[^-\s]\S*)??)*?\s+(?:deploy|publish|secret|rollback|delete|versions\s+(?:deploy|upload|secret)|pages\s+(?:deploy|publish)|triggers\s+deploy|d1\s+(?:execute|delete|migrations\s+apply)|(?:kv|r2)\b[^\n;&|]*\s--remote)(?=[\s;&|)]|$)/
+const DEPLOYS = 'deploys or touches cloud infrastructure'
+
+// Command shapes workers never run, checked against what the command really runs.
+// The real limits are the project's branch protection and the worker's permission
+// mode: these catch the common cases.
+/** @type {[RegExp, string][]} */
+const WORKER_COMMANDS = [
+  [/\bgit\s+(?:\S+\s+)*push\b[^\n;&|]*--no-verify\b/, "skips coop's pre-push check"],
+  [/\bgit\s+(?:\S+\s+)*push\b[^\n;&|]*\s(?:--force(?!-with-lease)\b|-f\b|--mirror\b|--delete\b|-d\b|--tags\b|--all\b)/, 'is a destructive or bulk push'],
   [/\bgh\s+pr\s+merge\b|\bgh\s+pr\s+review\s+[^\n;&|]*--approve\b/, 'merges or approves a pull request: that is for the lead'],
   [/\bgh\s+release\b|\bgh\s+secret\b|\bgh\s+variable\b|\bgh\s+repo\s+(?:delete|edit|rename|archive)\b|\bgh\s+workflow\s+run\b|\bgh\s+api\b[^\n;&|]*(?:-x|--method)\s*(?:put|post|patch|delete)\b/, 'changes GitHub settings, releases or secrets'],
-  [/\b(?:npm|pnpm|yarn|bun)\s+publish\b|\bcargo\s+publish\b|\btwine\s+upload\b|\bgem\s+push\b/, 'publishes a package'],
-  [/\b(?:wrangler\s+(?:deploy|publish|secret|d1\s+(?:execute|delete))|vercel(?:\s|$)|netlify\s+deploy|flyctl\s|fly\s+deploy|kubectl\s|helm\s|terraform\s+(?:apply|destroy)|pulumi\s+up|aws\s|gcloud\s|az\s)/, 'deploys or touches cloud infrastructure'],
+  [/\b(?:npm|pnpm|yarn|bun)(?:@\S*)?(?:\s+-\S+)*\s+publish\b|\bcargo\s+publish\b|\btwine\s+upload\b|\bgem\s+push\b/, 'publishes a package'],
+  [WRANGLER_CHANGE, DEPLOYS],
+  [running('vercel|flyctl|kubectl|helm|aws|gcloud|az'), DEPLOYS],
+  [running('netlify(?:-cli)?|fly', String.raw`\s+deploy\b`), DEPLOYS],
+  [running('terraform', String.raw`\s+(?:apply|destroy)\b`), DEPLOYS],
+  [running('pulumi', String.raw`\s+up\b`), DEPLOYS],
+  [/\b(?:npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?deploy\b/, DEPLOYS],
   [/\b(?:curl|wget|invoke-webrequest|iwr|invoke-restmethod|irm)\b[^\n;]*\|\s*(?:(?:ba|z|da|k)?sh|pwsh|powershell|iex|invoke-expression|python3?|node|perl|ruby)\b/, 'runs a downloaded script'],
   [/\binvoke-expression\b|\biex\b|\s-enc(?:odedcommand)?\s|\bbase64\s+(?:-d|--decode)\b[^\n;]*\|\s*(?:(?:ba|z|da|k)?sh|pwsh|powershell)\b/, 'runs hidden or generated code'],
-  [/\bsudo\b|\bdoas\b|\brunas\b|\bstart-process\b[^\n;]*-verb\s+runas/, 'asks for admin rights'],
-  [/\brm\s+-[a-z]*r[a-z]*\s+(?:-[a-z]+\s+)*["']?(?:\/|~|\$home|\.\.)(?:\s|\/?["']?$|\/\*)/m, 'deletes outside the project'],
-  [/\b(?:rmdir|rd|del)\s+\/[sq]\s+[^\n;&|]*(?:[a-z]:\\|%userprofile%|\.\.)/, 'deletes outside the project'],
-  [/\bremove-item\b[^\n;]*-recurse[^\n;]*(?:[a-z]:\\|\$home|\$env:|\.\.)/, 'deletes outside the project'],
-  [/\b(?:mkfs|fdisk|diskpart)\b|\bdd\s+[^\n;]*\bof=\/dev\/|\bformat\s+[a-z]:|\breg\s+(?:add|delete)\b|\bsetx\b|\bschtasks\b|\bcrontab\b/, 'changes this PC outside the project'],
+  [running('sudo|doas|runas'), 'asks for admin rights'],
+  [/\bstart-process\b[^\n;]*-verb\s+runas/, 'asks for admin rights'],
+  [running(String.raw`mkfs(?:\.\w+)?|fdisk|diskpart|setx|schtasks|crontab`), 'changes this PC outside the project'],
+  [running('reg', String.raw`\s+(?:add|delete)\b`), 'changes this PC outside the project'],
+  [/\bdd\s+[^\n;]*\bof=\/dev\/|\bformat\s+[a-z]:/, 'changes this PC outside the project'],
   [/\b(?:npm|pnpm|yarn)\s+(?:install|i|add)\s+[^\n;&|]*(?:-g\b|--global\b)|\bpip3?\s+install\s+[^\n;&|]*--user\b/, 'installs software system-wide'],
 ]
+
+const QUOTED = /"((?:[^"\\]|\\[\s\S])*)"|'([^']*)'/g
+const HERE_DOCUMENT = /<<-?[ \t]*(["']?)([\w.-]+)\1([^\n]*)\n(?:([\s\S]*?)\n)?[ \t]*\2[ \t]*(?=\r?\n|$)/g
+const HERE_STRING = /@(["'])\r?\n[\s\S]*?\r?\n\1@/g
+const STARTS_COMMAND = /(?:^|[;&|(\x60])\s*$/
+const RUNS_ITS_TEXT = /(?:\b(?:(?:ba|z|da|k)?sh|pwsh|powershell)(?:\.exe)?\b[^;&|\n]*\s-[a-z]*c\w*|\bcmd(?:\.exe)?\s+\/[ck]|\beval|<<<)\s*$/i
+const FED_TO_SHELL = /\|\s*(?:sudo\s+)?(?:(?:ba|z|da|k)?sh|pwsh|powershell|iex|cmd)(?:\.exe)?\b/i
+const TAKES_ITS_INPUT = /\b(?:(?:ba|z|da|k)?sh|pwsh|powershell|cmd|iex|python3?|node|perl|ruby|php)(?:\.exe)?\b/i
+const SPAWNS = /child_process|\bexecsync\b|\bexecfile|\bspawn|\bsubprocess\b|\bos\.system\b|\bpopen\b|\bsystem\s*\(|\bexec\s*\(/i
+const SUBSTITUTES = /\$\(|(?<!\\)`/
+const DELETE_SO_FAR = /(?:^|[\s;&|(\\/])(?:rm|rmdir|rd|del|erase|remove-item|ri)(?:\.exe)?\s[^;&|\n]*$/i
+
+// The command without the text it only mentions: a commit message or a grep for
+// "az email" isn't running anything. Text stays when something will run it, when
+// it's the program itself, and when it's one plain word, since `"aws" s3 rm` and
+// `git push "--force"` run just as well with the quotes.
+function whatRuns(command) {
+  const fed = FED_TO_SHELL.test(command)
+  return command
+    .replace(HERE_STRING, '""')
+    .replace(HERE_DOCUMENT, (whole, _quote, _tag, rest, body = '', at, text) => {
+      const line = text.slice(text.lastIndexOf('\n', at) + 1, at) + rest
+      return TAKES_ITS_INPUT.test(line) || SPAWNS.test(body) ? whole : `${rest}\n`
+    })
+    .replace(QUOTED, (whole, double, single, at, text) => {
+      const inner = double ?? single
+      const before = text.slice(Math.max(0, at - 200), at)
+      if (fed || RUNS_ITS_TEXT.test(before)) return ` ; ${inner} ; `
+      if (!/[\s;&|()`<>]/.test(inner) || STARTS_COMMAND.test(before) || DELETE_SO_FAR.test(before) || SPAWNS.test(inner) || (double !== undefined && SUBSTITUTES.test(inner))) return inner
+      return '""'
+    })
+}
 
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
 const FILE_TOOLS = [...WRITE_TOOLS, 'Read', 'NotebookRead', 'Glob', 'Grep', 'LS']
@@ -91,7 +146,7 @@ export function toolProblem(input, { role, projectDir, home = homedir(), temp = 
     const raw = args.command ?? args.cmd ?? ''
     if (typeof raw !== 'string') return 'coop could not read this command'
     const command = raw.replace(/\\\r?\n/g, ' ')
-    return commandProblem(command, role)
+    return commandProblem(command, role, { projectDir, cwd: typeof input.cwd === 'string' ? input.cwd : undefined, home, temp })
   }
   if (!FILE_TOOLS.includes(tool)) return null
 
@@ -124,13 +179,57 @@ function globBase(pattern) {
   return fixed.slice(0, Math.max(fixed.lastIndexOf('/'), fixed.lastIndexOf('\\')) + 1) || null
 }
 
-export function commandProblem(command, role) {
+/**
+ * @param {string} command
+ * @param {string} role
+ * @param {{ projectDir?: string, cwd?: string, home?: string, temp?: string }} [places]
+ */
+export function commandProblem(command, role, places = {}) {
   const text = command.toLowerCase()
   if (SECRET_PLACES.some((place) => place.test(text))) return `this command reaches a place where this PC keeps credentials`
   for (const [pattern, why] of SECRET_COMMANDS) if (pattern.test(text)) return `this command ${why}`
   if (role !== 'worker') return null
-  for (const [pattern, why] of WORKER_COMMANDS) if (pattern.test(text)) return `this command ${why}`
-  return pushProblem(command)
+  for (const [pattern, why] of CONTROL_COMMANDS) if (pattern.test(text)) return `this command ${why}`
+  const runs = whatRuns(command)
+  const lower = runs.toLowerCase()
+  for (const [pattern, why] of WORKER_COMMANDS) if (pattern.test(lower)) return `this command ${why}`
+  return pushProblem(runs) ?? deleteProblem(runs, places)
+}
+
+const DELETERS = /^(?:rm|rmdir|rd|del|erase|remove-item|ri)(?:\.exe)?$/i
+const CMD_DELETERS = /^(?:rmdir|rd|del|erase)(?:\.exe)?$/i
+
+// `rm -rf ../other`, `rm -f /etc/x`, `Remove-Item ..\x -Recurse`: whatever a delete
+// names has to be in the project, or in temp. The folder a `cd` earlier in the
+// command moved to, and a variable's value, aren't known here.
+function deleteProblem(command, { projectDir = process.cwd(), cwd = projectDir, home = homedir(), temp = tmpdir() }) {
+  for (const segment of command.split(/&&|\|\||[;&|\n()]/)) {
+    const words = segment.trim().split(/\s+/).map((word) => word.replace(/^["'`]+|["'`]+$/g, ''))
+    const at = words.findIndex((word) => DELETERS.test(word.split(/[\\/]/).pop() ?? ''))
+    if (at === -1) continue
+    const cmdStyle = CMD_DELETERS.test(words[at].split(/[\\/]/).pop() ?? '')
+    for (const word of words.slice(at + 1)) {
+      if (/^\d*[<>]/.test(word)) break
+      if (!word || word.startsWith('-') || (cmdStyle && /^\/[a-z]$/i.test(word))) continue
+      if (leavesProject(word, { projectDir, cwd, home, temp })) return 'this command deletes outside the project'
+    }
+  }
+  return null
+}
+
+function leavesProject(word, { projectDir, cwd, home, temp }) {
+  let target = word
+    .replace(/\\/g, '/')
+    .replace(/^~(?=\/|$)/, () => home)
+    .replace(/^(?:\$\{?(?:home|userprofile)\}?|\$env:(?:home|userprofile)|%userprofile%)(?=\/|$)/i, () => home)
+    .replace(/^(?:\$\{?(?:tmpdir|temp|tmp)\}?|\$env:(?:temp|tmp)|%te?mp%|\/tmp)(?=\/|$)/i, () => temp)
+    .replace(/^\$\{?pwd\}?(?=\/|$)/i, () => cwd)
+  if (/^~[\w-]+(?:\/|$)/.test(target)) return true
+  if (process.platform === 'win32') target = target.replace(/^\/([a-z])(?=\/|$)/i, '$1:')
+  else if (/^[a-z]:/i.test(target)) return true
+  if (target.includes('$') || /%\w+%/.test(target)) return false
+  if (/[*?[{]/.test(target)) target = globBase(target) ?? '.'
+  return pathProblem(target, { root: projectDir, base: cwd, also: [temp] }) !== null
 }
 
 // `git push origin main`, `git push origin HEAD:main`, `git push origin x:refs/heads/main`.

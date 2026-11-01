@@ -238,6 +238,32 @@ test('guard: known ways to write "push to main" are all caught, in any spelling 
   }
 })
 
+test('guard: known ways to write a deploy are all caught, in any spelling of the rest', () => {
+  const random = seededRandom(SEED + 20)
+  for (let round = 0; round < ROUNDS; round++) {
+    const spacing = () => random.pick([' ', '  ', '\t'])
+    const launcher = random.pick(['', 'npx ', 'npx --yes ', 'npx -y ', 'bunx ', 'pnpm dlx ', 'npm exec -- ', './node_modules/.bin/', 'FOO=1 '])
+    const version = random.pick(['', '@4', '@latest', '@4.1.2'])
+    const flags = random.pick(['', ' --env production', ' -c x.toml', ' --config=x.toml'])
+    const action = random.pick(['deploy', 'deploy --dry-run', 'secret put X', 'versions deploy', 'pages deploy dist', 'rollback', 'delete'])
+    const prefix = random.pick(['', 'cd x && ', 'true; ', 'false || ', '(', 'x=$('])
+    const command = `${prefix}${launcher}wrangler${version}${flags}${spacing()}${action}`
+    assert.ok(commandProblem(command, 'worker'), command)
+    assert.ok(commandProblem(`bash -c "${command}"`, 'worker'), `bash -c "${command}"`)
+  }
+})
+
+test('guard: words in prose never block a harmless command', () => {
+  const random = seededRandom(SEED + 21)
+  const words = ['az', 'Az', 'aws', 'helm', 'sudo', 'kubectl', 'vercel', 'wrangler deploy', 'npx wrangler@4 deploy', 'git push --force', 'git push origin main', 'gh pr merge', 'npm publish', 'npm run deploy', 'rm -rf ../x', 'rd /s /q ..', 'crontab -e', 'setx', '; aws s3 ls;', '&& sudo x']
+  for (let round = 0; round < ROUNDS; round++) {
+    const prose = `${random.pick(['Fix ', 'Az ', 'Stop using ', 'Never run '])}${random.pick(words)}${random.pick(['', ' email', ' in the docs'])}`
+    const quote = random.pick(['"', "'"])
+    const command = random.pick(['git commit -m', 'grep -rn', 'gh issue create --title', 'gh pr create --fill --title']) + ` ${quote}${prose}${quote}`
+    assert.equal(commandProblem(command, 'worker'), null, command)
+  }
+})
+
 test('auth: hostile authorization headers never get in and never crash', async () => {
   const random = seededRandom(SEED + 8)
   const { raw, call } = await hubForTest({ address: 'fuzz-auth' })

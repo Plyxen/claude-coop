@@ -5,6 +5,7 @@ export function shouldPush(event, profile) {
   const me = profile.member
   if (event.actor === me) return false
   if (profile.role === 'lead') return event.type !== 'permission_verdict'
+  if (profile.role !== 'worker') return false
 
   const d = event.data ?? {}
   const mine = d.assignee === me || d.previous_assignee === me

@@ -184,9 +184,22 @@ test('permission prompts on a worker are relayed to the lead and answered', asyn
       return previous?.(notification)
     }
   })
-  const answer = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'allow' } })
+  // The lead's Claude can't say yes, whatever it is told. It can say no.
+  const refused = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'allow' } })
+  assert.equal(refused.isError, true)
+  assert.match(refused.content[0].text, /coop approve bob qwert/)
+  const answer = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'deny' } })
   assert.equal(answer.isError, undefined)
-  assert.deepEqual(await verdict, { request_id: 'qwert', behavior: 'allow' })
+  assert.deepEqual(await verdict, { request_id: 'qwert', behavior: 'deny' })
+})
+
+test('coop approve needs a person at a terminal, and the hub needs the passphrase', async () => {
+  // Spawned here without a terminal, the way a Claude's shell tool runs things.
+  await assert.rejects(coop('approve', 'bob', 'abcde', '--profile', 'boss'), /needs a person at a terminal/)
+  await assert.rejects(coop('approvals', 'setup', '--profile', 'boss'), /needs a person at a terminal/)
+  // And the MCP server has no way to mint a credential into the conversation.
+  const tools = (await sessions[0].listTools()).tools.map((t) => t.name)
+  assert.ok(!tools.includes('coop_invite'))
 })
 
 test('coop_inbox works for sessions without channels', async () => {

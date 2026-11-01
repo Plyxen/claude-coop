@@ -1,6 +1,6 @@
 {
   "name": "claude-code-multi-pc",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Run Claude Code across multiple PCs and Claude accounts: one lead Claude hands tasks to worker Claudes on your friends' computers, and every Claude sees what the crew is doing.",
   "type": "module",
   "bin": {
@@ -18,6 +18,9 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
+    "test:security": "node --test --test-concurrency=1 \"test/security-*.test.js\" \"test/fuzz.test.js\"",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json",
     "hub": "node bin/coop.js hub"
   },
   "dependencies": {
@@ -42,5 +45,15 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Plyxen/claude-code-multi-pc.git"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "minimatch": "^11.0.3"
   }
 }

@@ -26,16 +26,18 @@ During the research preview, Claude Code only loads channels from Anthropic's al
 
 ## Events
 
-Everything that happens is an event in the hub's log: task created, assigned, claimed, progress, blocked, submitted, approved, changes requested, released, cancelled, reopened, comments, messages, members coming online, and permission requests and answers.
+Everything that happens is an event in the hub's log: task created, assigned, claimed, progress, blocked, submitted, approved, changes requested, released, cancelled, reopened, comments, messages, members coming online, permission requests and answers, and security alerts. Security-relevant actions also go in a separate [audit log](security.md#seeing-what-happened). Both are deleted after 90 days by default.
 
 Each MCP server polls `GET /v1/events?after=<cursor>` every 8 seconds (20 when nothing has happened for 5 minutes, 2 while a permission request is open). It keeps its cursor in `~/.claude-coop/state/`, so a restart doesn't replay old events. Then it decides what to push:
 
 | Who | Gets pushed |
 | --- | --- |
-| Lead | Everything the workers do: online, claims, progress, blocks, submissions, releases, messages, permission requests |
+| Lead | Everything the workers do: online, claims, progress, blocks, submissions, releases, messages, permission requests, and security alerts |
 | Worker | Tasks assigned to it, open tasks anyone may claim, feedback, approvals and cancellations of its own tasks, approvals of others' work (so it pulls before the next change), messages to it or to everyone |
 
 Events that arrive together go out as one batched push, so an idle Claude wakes up once rather than once per event.
+
+What Claude reads is treated as data. Everything from the hub is cleaned first: control characters and terminal escapes are removed, and text can't open or close the tags it arrives in, so it can't pass as coop or as someone else. Who sent it comes from the hub, which knows it from the sender's token. None of this stops a Claude from being persuaded by what it reads: see the [threat model](threat-model.md).
 
 ## Task states
 
@@ -63,6 +65,8 @@ Channel pushes are best effort: Claude Code doesn't acknowledge them. claude-cod
 - Every 5 minutes, an idle worker that has unclaimed work assigned to it, or open tasks waiting, gets a reminder (at most 3 per task).
 - When the lead's session starts, it hears what's waiting for review or blocked.
 - Sessions without channels can still work through `coop_inbox` (with `wait_seconds`).
+- A change the client retries after a lost answer carries the same request id, so the hub doesn't run it twice. The client gives up after one retry, and every call has a 15-second timeout.
+- The event cursor is on disk and the rest is in the hub's database, so a restart of the hub or a session loses nothing. A session whose token stops working stops polling and says so.
 
 ## Presence
 
@@ -70,4 +74,25 @@ The MCP server's requests count as a heartbeat, and it polls all the time. One-o
 
 ## Permission relay
 
-A worker's channel declares Claude Code's `claude/channel/permission` capability. When Claude Code would show a permission prompt on the worker's PC, it also sends it to the coop server, which forwards it to the hub. The lead's Claude shows it to the lead's user, and their answer (`coop_permission`) travels back the same way. The prompt stays open on the worker's PC the whole time, and whichever answer arrives first wins. Turn it off with `coop start --no-relay`.
+A worker's channel declares Claude Code's `claude/channel/permission` capability. When Claude Code would show a permission prompt on the worker's PC, it also sends it to the coop server, which forwards it to the hub. The hub adds the worker's current task, a risk label and a 10-minute expiry. The lead's Claude shows it to the lead's user.
+
+The answer travels back the same way, and the prompt stays open on the worker's PC the whole time. Whichever answer arrives first wins. Turn it off with `coop start --no-relay`.
+
+- **The lead's Claude can refuse** (`coop_permission`), **but it can't approve.** Approving is `coop approve` in a terminal, with a passphrase the hub checks. The Claude's lead token alone gets refused.
+- **An answer works once**, for that worker and that request, inside its time. The hub checks all of that atomically, and refuses and logs anything else.
+- **The worker's server checks too.** It only passes an answer on if it came from the lead, for a request this session has open, in time. A restarted session has none open, so an old answer goes nowhere.
+
+The worker's server can't check that the hub is telling the truth, since answers aren't signed: see the [threat model](threat-model.md#a-compromised-hub-or-its-host).
+
+## Roles
+
+Each token belongs to a member, and each member has a role: lead, worker or observer. The hub checks the role on every request. What a Claude's tools offer is only a convenience. [security.md](security.md#roles) has the table.
+
+## Guards
+
+`coop start` adds two checks that run whatever Claude decides:
+
+- **A Claude Code `PreToolUse` hook** runs `coop guard tool` before each file and shell tool call. Exit code 2 blocks the call. It resolves real paths for file tools, and matches known shapes for shell commands.
+- **A git `pre-push` hook** runs `coop guard pre-push` for workers.
+
+They also add deny rules, which Claude Code itself enforces, through a settings file in `~/.claude-coop/run/`. All of this catches mistakes and common payloads, and isn't a sandbox: see [security guarantees](security-guarantees.md).

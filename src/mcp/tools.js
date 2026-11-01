@@ -1,7 +1,6 @@
 // The tools each Claude gets. Leads plan, review and manage the crew;
 // workers claim, report and submit. Both can read the board and message.
 import { formatBoard, formatTask } from '../format.js'
-import { inviteText } from '../meta.js'
 
 const taskId = { type: 'integer', minimum: 1, description: 'Task number, like 3 for #3' }
 
@@ -119,18 +118,8 @@ const lead = [
     },
   },
   {
-    name: 'coop_invite',
-    description: 'Invite someone to the crew as a worker, or give an existing worker a new token. Returns the join instructions to send them privately (the token works like a password).',
-    inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Their crew name: lowercase letters, digits, - and _' } }, required: ['name'] },
-    run: async ({ client, profile }, args) => {
-      const result = await client.invite(args.name)
-      const text = inviteText({ hub: profile.hub, name: result.name, token: result.token, crew: profile.crew })
-      return `${result.rotated ? `New token for ${result.name}; the old one no longer works.` : `Invited ${result.name}.`} Give your user this to send them privately (DM, not a public channel):\n\n${text}`
-    },
-  },
-  {
     name: 'coop_remove',
-    description: 'Remove a worker from the crew. Their token stops working and their unfinished tasks go back to the pool.',
+    description: 'Remove a worker from the crew. Their tokens stop working and their unfinished tasks go back to the pool. To invite someone, ask your user to run coop invite NAME in their own terminal: tokens never pass through this conversation.',
     inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
     run: async ({ client }, args) => {
       const result = await client.remove(args.name)
@@ -139,19 +128,22 @@ const lead = [
   },
   {
     name: 'coop_permission',
-    description: "Answer a worker's permission request. Only call this with the decision your user gave you.",
+    description: "Refuse a worker's permission request. You can't approve one: only your user can, by running coop approve in their own terminal with their passphrase.",
     inputSchema: {
       type: 'object',
       properties: {
         worker: { type: 'string' },
         request_id: { type: 'string', description: 'The five-letter id from the request' },
-        decision: { type: 'string', enum: ['allow', 'deny'] },
+        decision: { type: 'string', enum: ['deny'] },
       },
       required: ['worker', 'request_id', 'decision'],
     },
     run: async ({ client }, args) => {
-      await client.permissionVerdict({ worker: args.worker, request_id: args.request_id, behavior: args.decision })
-      return `Sent "${args.decision}" to ${args.worker} for request ${args.request_id}.`
+      if (args.decision !== 'deny') {
+        throw Object.assign(new Error(`you can't approve permission requests. Ask your user to run this in their own terminal: coop approve ${args.worker} ${args.request_id}`), { expose: true })
+      }
+      await client.permissionVerdict({ worker: args.worker, request_id: args.request_id, behavior: 'deny' })
+      return `Refused request ${args.request_id} from ${args.worker}.`
     },
   },
 ]
@@ -232,5 +224,6 @@ const worker = [
 ]
 
 export function toolsFor(role) {
-  return [...common, ...(role === 'lead' ? lead : worker)]
+  if (role === 'lead') return [...common, ...lead]
+  return role === 'worker' ? [...common, ...worker] : common
 }

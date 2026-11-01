@@ -1,5 +1,9 @@
 // Plain-text views of the board, tasks and events, shared by the MCP tools
-// (what Claude reads) and the CLI (what people read).
+// (what Claude reads) and the CLI (what people read). All of it came from the
+// network, so nothing here may move a terminal's cursor or close a <channel> tag.
+import { cleanText, neutralizeMarkup } from './validate.js'
+
+const safe = (text) => neutralizeMarkup(cleanText(text))
 
 export function ago(iso, now = Date.now()) {
   if (!iso) return 'never'
@@ -28,6 +32,8 @@ export function taskLine(task) {
 
 export function formatBoard(board) {
   const lines = [`Crew "${board.hub}": you are ${board.me} (${board.role})`, '', 'Members']
+  if (board.security_alerts) lines.splice(1, 0, `Security: ${board.security_alerts} alert(s) in the last day. Run coop audit --alerts.`)
+  if (board.pending_permissions) lines.splice(1, 0, `Permissions: ${board.pending_permissions} open request(s). Run coop permissions.`)
   for (const m of board.members) {
     const state = m.online ? 'online' : `offline (last seen ${ago(m.last_seen)})`
     const working = m.working_on.length ? `, working on ${m.working_on.map((id) => `#${id}`).join(', ')}` : ''
@@ -43,7 +49,7 @@ export function formatBoard(board) {
     lines.push('', 'Recent activity')
     for (const event of board.recent) lines.push(`  ${ago(event.ts).padEnd(9)} ${describeEvent(event)}`)
   }
-  return lines.join('\n')
+  return safe(lines.join('\n'))
 }
 
 export function formatTask({ task, history = [] }) {
@@ -60,7 +66,7 @@ export function formatTask({ task, history = [] }) {
     lines.push('', 'History')
     for (const event of history) lines.push(`  ${ago(event.ts).padEnd(9)} ${describeEvent(event)}`)
   }
-  return lines.join('\n')
+  return safe(lines.join('\n'))
 }
 
 // One line per event, for the board and history views.
@@ -100,6 +106,8 @@ export function describeEvent(event) {
       return `${who} asked permission for ${d.tool_name}${note} [${d.request_id}]`
     case 'permission_verdict':
       return `${who} answered permission ${d.request_id}: ${d.behavior}`
+    case 'security_alert':
+      return `security alert${note}`
     default:
       return event.text ? `${event.text}` : `${who}: ${event.type}`
   }

@@ -18,6 +18,17 @@ export async function sqliteDatabase(path = ':memory:') {
       const result = db.prepare(sql).run(...params)
       return { changes: Number(result.changes), lastId: Number(result.lastInsertRowid) }
     },
+    // All statements commit together, or none of them do.
+    async batch(statements) {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        for (const [sql, params = []] of statements) db.prepare(sql).run(...params)
+        db.exec('COMMIT')
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
     close() {
       db.close()
     },

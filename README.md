@@ -27,7 +27,7 @@ You and your friends each have Claude Code on your own computer, signed in to yo
 - **Hands-free workers.** New tasks are pushed straight into the worker's running Claude Code session through [channels](https://code.claude.com/docs/en/channels), so it starts on its own. Nobody types anything on the worker's PC, and nothing takes over the screen or the mouse.
 - **Everyone knows what's going on.** The lead hears every claim, progress note, question and submission as it happens. Workers hear about their tasks, open tasks they could take, and merged work they should pull. `coop status` shows the whole board.
 - **Git does the code.** Each task gets its own branch (`coop/12-add-csv-export`). The worker pushes it and opens a pull request, and the lead reviews it before anything is merged.
-- **Each friend keeps control of their PC.** Workers are told to stay in the project folder, follow the project's rules, and never push to main, deploy or touch secrets. Claude Code's permission mode backs that up, and permission prompts can be forwarded to the lead's user. See [Security](docs/security.md).
+- **Each friend keeps control of their PC.** Each one picks their Claude's permission mode. Workers are told to stay in the project folder and away from `main`, deploys and secrets, and `coop start` adds checks that run whatever Claude decides. A Claude can't approve a permission prompt by itself: that takes a person. These limit mistakes and common attacks, and they aren't a sandbox: [here's exactly what's enforced](docs/security-guarantees.md).
 - **Free to run.** The hub fits in Cloudflare's free tier, or runs on your own PC. Each Claude uses its own person's plan.
 
 ## How a task flows
@@ -39,7 +39,7 @@ You and your friends each have Claude Code on your own computer, signed in to yo
 
 ## Requirements
 
-- [Claude Code](https://code.claude.com/docs/en/quickstart) 2.1.80 or newer on every PC, each signed in to its own claude.ai account (Pro or Max) or a Console API key. On Team and Enterprise plans an admin has to [enable channels](https://code.claude.com/docs/en/channels#enterprise-controls).
+- [Claude Code](https://code.claude.com/docs/en/quickstart) 2.1.80 or newer on every PC, each signed in to its own claude.ai account (Pro or Max) or a Console API key. Use 2.1.295 or newer if you can: on older versions, coop's safety check lets a tool call through if the check itself can't run. On Team and Enterprise plans an admin has to [enable channels](https://code.claude.com/docs/en/channels#enterprise-controls).
 - [Node.js](https://nodejs.org) 22.13 or newer.
 - A git repository everyone can push branches to (GitHub, GitLab or anything else), plus the [GitHub CLI](https://cli.github.com) for pull requests.
 - A hub everyone can reach: a free Cloudflare Worker (recommended), or the lead's own PC.
@@ -61,8 +61,9 @@ coop hub --lead-name yourname --crew my-crew
 The hub prints your lead token and the `coop join` line to run next. Then:
 
 ```bash
-coop join --hub <hub url> --token <lead token>
-coop invite anna        # prints the steps to send anna; her token is a password, so DM it
+coop join --hub <hub url>   # asks for the lead token
+coop approvals setup    # choose a passphrase, so that only you, not your Claude, can approve things
+coop invite anna        # prints the steps to send anna; the token is a password, so DM it
 cd path/to/your/project
 coop start              # your Claude, now the lead of the crew
 ```
@@ -93,6 +94,9 @@ On the first start Claude Code asks them to trust the folder. It also warns abou
 | `coop update` | Installs the latest version. Your next `coop start` is a new session, so the new instructions take effect. |
 | `coop doctor` | Checks this PC's setup. |
 | `coop invite NAME` · `coop remove NAME` | Lead only: add a friend, or remove one (their unfinished tasks go back to the pool). |
+| `coop permissions` · `coop approve WORKER ID` · `coop deny WORKER ID` | Lead only: answer a worker's permission prompts. Approving asks for your passphrase, in your own terminal. |
+| `coop audit` | Lead only: the hub's security log. `coop audit --local` shows what coop's checks blocked on this PC. |
+| `coop tokens` · `coop tokens rotate` | List tokens, or renew yours. New tokens last 90 days. |
 
 `coop help` lists everything. If someone's PC is off, their tasks wait on the hub until they `coop start` again.
 
@@ -103,8 +107,8 @@ On the first start Claude Code asks them to trust the folder. It also warns abou
 | `coop_assign`: create a task | `coop_claim`: take a task | `coop_status`: the board |
 | `coop_review`: approve or send back | `coop_progress`: note a milestone, or blocked | `coop_task`: one task in full |
 | `coop_manage_task`: reassign, cancel, reopen, comment | `coop_submit`: hand in for review | `coop_send`: message someone or everyone |
-| `coop_invite`, `coop_remove`: the crew | `coop_release`: give a task back | `coop_inbox`: updates, for sessions without channels |
-| `coop_permission`: answer a worker's permission prompt | | |
+| `coop_remove`: take someone out of the crew | `coop_release`: give a task back | `coop_inbox`: updates, for sessions without channels |
+| `coop_permission`: refuse a worker's permission prompt (approving takes a person: `coop approve`) | | |
 
 ## Questions
 
@@ -118,7 +122,10 @@ The worker's. Each Claude runs on its own person's plan or API key. The lead use
 No. With the hub on Cloudflare, every PC only needs the internet. A hub on your own PC works on your network, or anywhere through a tunnel or [Tailscale](docs/self-hosting.md).
 
 **Can a worker's Claude do something harmful because the lead said so?**
-Workers follow the lead's instructions, so only join crews whose lead you'd trust with your PC's Claude. The worker's own permission mode, the project's CLAUDE.md and the built-in rules (stay in the folder, no secrets, no deploys) are the limits. [Security](docs/security.md) spells it out.
+Yes, it can. Workers follow the lead's instructions, so only join crews whose lead you'd trust with your PC's Claude. The limits are the worker's own permission mode and coop's checks, which catch common cases but aren't a sandbox. For a hard limit, run the worker in a VM or a separate user account, or with `coop start --sandbox` on macOS, Linux or WSL2. [Security](docs/security.md) spells it out.
+
+**Is it secure?**
+It's a young project that was hardened on purpose, and it can't make Claude immune to prompt injection or protect you from a hub or lead you shouldn't have trusted. The rule it's built on is that Claude isn't the security boundary, so what matters is enforced by the hub, Claude Code's hooks, git, your git host, the OS or a person. [Security guarantees](docs/security-guarantees.md) lists what's enforced, what's only partly enforced and what isn't, and the [threat model](docs/threat-model.md) explains why.
 
 ## Docs
 
@@ -127,12 +134,13 @@ Workers follow the lead's instructions, so only join crews whose lead you'd trus
 - [Worker setup](docs/worker-setup.md): the page to send your friends
 - [Project setup](docs/project-setup.md): the CLAUDE.md section and git workflow that make co-op smooth
 - [Deploy the hub to Cloudflare](docs/deploy-cloudflare.md) · [Self-host the hub](docs/self-hosting.md)
-- [Security](docs/security.md): what a worker can and can't be asked to do, and the knobs
-- [Troubleshooting](docs/troubleshooting.md) · [Hub API](docs/api.md) · [Changelog](CHANGELOG.md)
+- [Security](docs/security.md): the practical guide: what a worker can be asked to do, approvals, tokens, recommended setup
+- [Security guarantees](docs/security-guarantees.md) · [Threat model](docs/threat-model.md): what's enforced and what isn't, and why
+- [Configuration reference](docs/configuration.md) · [Troubleshooting](docs/troubleshooting.md) · [Hub API](docs/api.md) · [Changelog](CHANGELOG.md)
 
 ## Status
 
-Version 0.1: young, but tested end to end. `npm test` drives a real hub, the CLI and an MCP server per crew member, and the tool has run live between two PCs on two Claude accounts. Channels are a Claude Code research preview, so launch flags may change as Anthropic updates them. Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Version 0.2: young, but tested end to end. `npm test` drives a real hub, the CLI and an MCP server per crew member, and an earlier version has run live between two PCs on two Claude accounts. Channels are a Claude Code research preview, so launch flags may change as Anthropic updates them. Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, please open a [security advisory](https://github.com/Plyxen/claude-code-multi-pc/security/advisories/new).
 
 ## License
 

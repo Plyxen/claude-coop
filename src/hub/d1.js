@@ -12,5 +12,9 @@ export function d1Database(d1) {
       const result = await d1.prepare(sql).bind(...params).run()
       return { changes: result.meta.changes, lastId: result.meta.last_row_id }
     },
+    // All statements commit together, or none of them do.
+    async batch(statements) {
+      await d1.batch(statements.map(([sql, params = []]) => d1.prepare(sql).bind(...params)))
+    },
   }
 }

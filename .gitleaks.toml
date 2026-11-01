@@ -1,0 +1,13 @@
+# The default rules, plus coop's own tokens. The test suite is full of made-up
+# secrets that exist to prove they get caught, so tests are left out.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "coop-token"
+description = "claude-code-multi-pc crew token"
+regex = '''\bcoop_[A-Za-z0-9_-]{32}\b'''
+
+[allowlist]
+description = "Fake secrets in tests, and placeholders in docs"
+paths = ['''^test/''']

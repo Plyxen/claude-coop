@@ -218,17 +218,22 @@ function deleteProblem(command, { projectDir = process.cwd(), cwd = projectDir, 
 }
 
 function leavesProject(word, { projectDir, cwd, home, temp }) {
-  let target = word
-    .replace(/\\/g, '/')
-    .replace(/^~(?=\/|$)/, () => home)
-    .replace(/^(?:\$\{?(?:home|userprofile)\}?|\$env:(?:home|userprofile)|%userprofile%)(?=\/|$)/i, () => home)
-    .replace(/^(?:\$\{?(?:tmpdir|temp|tmp)\}?|\$env:(?:temp|tmp)|%te?mp%|\/tmp)(?=\/|$)/i, () => temp)
-    .replace(/^\$\{?pwd\}?(?=\/|$)/i, () => cwd)
-  if (/^~[\w-]+(?:\/|$)/.test(target)) return true
-  if (process.platform === 'win32') target = target.replace(/^\/([a-z])(?=\/|$)/i, '$1:')
-  else if (/^[a-z]:/i.test(target)) return true
-  if (target.includes('$') || /%\w+%/.test(target)) return false
-  if (/[*?[{]/.test(target)) target = globBase(target) ?? '.'
+  const windows = process.platform === 'win32'
+  const spelled = word.replace(/\\/g, '/')
+  if (/^~[\w-]+(?:\/|$)/.test(spelled) || (!windows && /^[a-z]:/i.test(spelled))) return true
+  // Where a path starts, once: what that expands to isn't read as a spelling again.
+  // Git Bash shows its temp folder as /tmp and a drive as /c.
+  /** @type {[RegExp, string][]} */
+  const starts = [
+    [/^(?:~|\$\{?(?:home|userprofile)\}?|\$env:(?:home|userprofile)|%userprofile%)(?=\/|$)/i, home],
+    [windows ? /^(?:\$\{?(?:tmpdir|temp|tmp)\}?|\$env:(?:temp|tmp)|%te?mp%|\/tmp)(?=\/|$)/i : /^\$\{?(?:tmpdir|temp|tmp)\}?(?=\/|$)/i, temp],
+    [/^\$\{?pwd\}?(?=\/|$)/i, cwd],
+  ]
+  const start = starts.find(([spelling]) => spelling.test(spelled))
+  const rest = start ? spelled.replace(start[0], '') : spelled
+  if (rest.includes('$') || /%\w+%/.test(rest)) return false
+  const fixed = /[*?[{]/.test(rest) ? globBase(rest) ?? '.' : rest
+  const target = start ? start[1] + fixed : windows ? fixed.replace(/^\/([a-z])(?=\/|$)/i, '$1:') : fixed
   return pathProblem(target, { root: projectDir, base: cwd, also: [temp] }) !== null
 }
 

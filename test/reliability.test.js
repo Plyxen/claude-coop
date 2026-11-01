@@ -20,6 +20,7 @@ import { sqliteDatabase } from '../src/hub/sqlite.js'
 import { LEAD, hubForTest } from './helpers.js'
 
 const BIN = fileURLToPath(new URL('../bin/coop.js', import.meta.url))
+const CLIENT = new URL('../src/client.js', import.meta.url).href
 const run = promisify(execFile)
 const silent = () => {}
 
@@ -177,17 +178,15 @@ test('a client will not talk plain http across the internet', () => {
   assert.ok(new HubClient({ hub: 'https://example.com', token: 'x' }))
 })
 
-test('a client will not send its token with certificate checks turned off', (t) => {
-  const was = process.env.NODE_TLS_REJECT_UNAUTHORIZED
-  t.after(() => {
-    if (was === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED
-    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = was
-  })
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-  assert.throws(() => new HubClient({ hub: 'https://example.com', token: 'x' }), /certificate checks/)
-  assert.ok(new HubClient({ hub: 'http://127.0.0.1:1', token: 'x' }), "there's no certificate on a local address")
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'
-  assert.ok(new HubClient({ hub: 'https://example.com', token: 'x' }))
+test('a client will not send its token with certificate checks turned off', async () => {
+  // In a child process, so the tests themselves never run with the checks off.
+  const newClient = (setting, hub) => {
+    const script = `import { HubClient } from ${JSON.stringify(CLIENT)}\nnew HubClient({ hub: ${JSON.stringify(hub)}, token: 'x' })`
+    return run(process.execPath, ['--input-type=module', '--eval', script], { env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: setting } })
+  }
+  await assert.rejects(newClient('0', 'https://example.com'), (error) => /certificate checks/.test(error.stderr))
+  await newClient('0', 'http://127.0.0.1:1') // there's no certificate on a local address
+  await newClient('1', 'https://example.com')
 })
 
 test('private files are owner-only where the OS has file modes', { skip: process.platform === 'win32' }, () => {

@@ -83,6 +83,9 @@ test('paths inside the project pass; a shared prefix does not', () => {
   assert.match(pathProblem(join(outside, 'secret.txt'), opts), /outside/)
   assert.match(pathProblem(`${project}-evil/x`, opts), /outside/, 'a name that merely starts with the project')
   assert.match(pathProblem(join(project, '..', '..'), opts), /outside/)
+  // A backslash separates folders on Windows. Elsewhere it's part of a file's name, in the project.
+  if (process.platform === 'win32') assert.match(pathProblem('..\\outside\\secret.txt', opts), /outside/)
+  else assert.equal(pathProblem('..\\outside\\secret.txt', opts), null)
 })
 
 test('a relative path counts from where the tool is, not from the project', () => {

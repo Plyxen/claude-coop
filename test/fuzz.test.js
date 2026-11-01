@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { test } from 'node:test'
 import { commandProblem, prePushProblem, toolProblem } from '../src/guard.js'
 import { classifyRisk } from '../src/hub/risk.js'
@@ -186,8 +186,12 @@ test('paths: whatever passes is really inside the project', () => {
         }
       }
       const result = pathProblem(candidate, { root: base })
-      if (result === null && /^\.\.(?:[\\/]|$)/.test(candidate) && !/\.\.[\\/]\.\./.test(candidate)) {
-        assert.fail(`climbed out with ${JSON.stringify(candidate)}`)
+      if (result === null) {
+        // Worked out apart from the code under test, by this OS's rules: a
+        // backslash only separates folders on Windows.
+        const from = relative(base, resolve(base, candidate))
+        const climbed = from === '..' || from.startsWith(`..${sep}`) || isAbsolute(from)
+        assert.equal(climbed, false, `climbed out with ${JSON.stringify(candidate)}`)
       }
     }
   } finally {

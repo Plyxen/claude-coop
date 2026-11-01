@@ -9,7 +9,7 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` runs the hub tests, an end-to-end test that starts a hub, uses the CLI, and drives a lead and two workers through real stdio MCP connections, and the security, reliability and fuzz tests. `npm run test:security` runs only the security and fuzz tests. Fuzz tests are seeded: a failure prints its seed, and `COOP_FUZZ_SEED` and `COOP_FUZZ_ROUNDS` repeat or extend a run.
+`npm test` runs the hub tests, an end-to-end test that starts a hub, uses the CLI, and drives a lead and two workers through real stdio MCP connections, and the security, reliability and fuzz tests. `npm run test:security` runs only the security and fuzz tests. Fuzz tests are seeded, so each run repeats exactly and a failure shows its input. `COOP_FUZZ_SEED` and `COOP_FUZZ_ROUNDS` pick another sequence or a longer run.
 
 ## Layout
 

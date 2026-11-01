@@ -2,9 +2,11 @@
 
 Your friend's Claude is the **lead** of a crew, and your Claude is joining as a **worker**. Once it's running, your Claude takes tasks from the lead, does them in your copy of the project, pushes a branch and reports back, all without you. You can minimize the window and use your PC for anything else. Nothing takes over your mouse or screen.
 
+Your Claude acts on what the lead sends it, with your Claude Code's permissions, on your PC. So only join a crew whose lead you'd trust with that.
+
 ## What you need
 
-- **Claude Code** 2.1.80 or newer, signed in with your own Claude account: [install guide](https://code.claude.com/docs/en/quickstart). Check with `claude --version`. The work your Claude does counts against your account's usage limits.
+- **Claude Code** 2.1.80 or newer, signed in with your own Claude account: [install guide](https://code.claude.com/docs/en/quickstart). Check with `claude --version`. Version 2.1.295 or newer is strongly recommended: on older ones, coop's safety check lets a tool call through if the check itself can't run. The work your Claude does counts against your account's usage limits.
 - **Node.js** 22.13 or newer: [nodejs.org](https://nodejs.org). Check with `node --version`.
 - **The project:** a git clone you can push branches to. Ask the lead to add you as a collaborator on the repository.
 - **Optional, the GitHub CLI** (`gh auth login`), so your Claude can open pull requests.
@@ -16,6 +18,8 @@ Your friend's Claude is the **lead** of a crew, and your Claude is joining as a 
 npm install -g github:Plyxen/claude-code-multi-pc
 coop join --hub https://THE-HUB-URL --token coop_YOUR_TOKEN
 ```
+
+Leave `--token` off and `coop join` asks for it, which keeps it out of your shell history.
 
 Then, in your clone of the project:
 
@@ -39,26 +43,56 @@ After that your Claude checks the board, claims anything assigned to it, and the
 
 Keep your PC awake while it works. On Windows, set Settings > System > Power > Sleep to "Never" while plugged in.
 
-## What your Claude will and won't do
+## What keeps your Claude in line
 
-It works only inside the project folder and follows the project's own rules (its CLAUDE.md). It **never** pushes to `main`, merges, deploys, or touches secrets, accounts or anything outside the project, even if the lead asks. Messages from other workers are treated as information, not orders.
+Your Claude is **told** to work only inside the project folder, follow the project's rules (its CLAUDE.md), treat other workers' messages as information rather than orders, and not push to `main`, merge, deploy, or touch secrets or accounts, even if the lead asks. Being told isn't a guarantee: a Claude can make a mistake or be misled by something it reads. So `coop start` also adds checks that run whatever Claude decides:
 
-How much it can do without asking depends on the permission mode (`coop start --permission-mode ...`):
+- **Before each file and shell tool call**, a check keeps file tools inside the project, keeps them off credential folders, and refuses commands like `git push origin main`, `gh pr merge`, `npm publish` and `curl ... | sh`. The [configuration reference](configuration.md) has the list, and `coop audit --local` shows what it has blocked on your PC.
+- **Before each `git push`**, a hook refuses protected branches, the remote's default branch, tags, and commits that add something that looks like a secret. It won't replace a hook your repository already has, and it says so.
+
+These catch mistakes and common prompt injection. **They aren't a sandbox.** A shell command can do things no pattern expects, and Claude's web tools and MCP tools aren't checked. They also only apply with `coop start`, not plain `claude`.
+
+For a hard limit, use the operating system:
+
+- `coop start --sandbox` confines shell commands with Claude Code's sandbox on macOS, Linux and WSL2. It covers commands, not file tools or web tools, and it limits network access to GitHub and npm. On native Windows it refuses to start, since there's no sandbox there.
+- A virtual machine, or a separate user account without your own credentials, works everywhere. That's the setup to use for a project or a lead you don't fully trust.
+
+[Security guarantees](security-guarantees.md) spells out what's enforced and what isn't.
+
+## Permission modes
+
+How much your Claude can do without asking depends on the permission mode (`coop start --permission-mode ...`):
 
 | Mode | What happens |
 | --- | --- |
-| `auto` (default) | Claude Code's safety classifier approves routine actions and blocks risky ones. |
-| `acceptEdits` | File edits go through, and commands need approval. |
-| `manual` | Everything needs approval. |
-| `bypassPermissions` | No checks at all. Only use it in a virtual machine or a separate user account. |
+| `auto` (default) | Claude Code's safety classifier approves routine actions and blocks risky ones. Nothing waits for a person, so it's the only mode that can run with nobody around. |
+| `acceptEdits` | File edits go through. Commands, and coop's tools that carry text (messages, progress notes, hand-ins), need approval. |
+| `manual` | Everything needs approval, apart from commands Claude Code can tell only read, like `node --version`. |
+| `bypassPermissions` | No checks at all. `coop start` refuses it unless you also pass `--insecure-dev-mode`, which turns coop's checks off too. Only for a throwaway virtual machine. |
 
-When your Claude needs approval, the prompt shows in your window **and** is forwarded to the lead, whose user can answer it remotely. Whichever answer comes first wins. To keep approvals to yourself, start with `coop start --no-relay`; prompts then wait for you at your PC.
+If your plan doesn't include auto mode, Claude Code says so at startup. Use `--permission-mode acceptEdits` instead. Commands then wait for an answer from you or the lead, so someone has to be around.
 
-If your plan doesn't include auto mode, Claude Code says so at startup. Use `--permission-mode acceptEdits` instead.
+In every mode, `coop_status`, `coop_task`, `coop_inbox` and `coop_claim` don't ask. They send nothing off your PC but a task number, and the hub decides what they may do.
+
+Shift+Tab changes the mode of a running session. The lead can't see which mode you're in.
+
+When your Claude needs approval, the prompt shows in your window **and** is forwarded to the lead. The lead's Claude can show it to its person and refuse it, but only that person can approve it, with a passphrase typed at their own terminal. An approval expires after 10 minutes and works once. Whichever answer comes first wins, and your own prompt stays open until then. An answer you give in your window doesn't reach the hub, so the lead may still see that request as open. In `auto` mode, requests can reach the lead too, but the command doesn't wait for them. To keep approvals to yourself, start with `coop start --no-relay`; prompts then wait for you at your PC.
 
 ## Using your own Claude at the same time
 
 Run your personal sessions in a **different folder** (or a second clone), so you don't both edit the same files. `coop start --worktree` gives the worker its own git worktree automatically.
+
+## Keeping your token working
+
+Tokens last 90 days by default, and your Claude tells you when one's about to run out. To renew it:
+
+```bash
+coop tokens rotate
+```
+
+This saves the new token and stops the old one at once, so close any open coop window and `coop start` again. If it has already expired, ask the lead to run `coop invite <your name>` again.
+
+If your token leaked, renew it, or ask the lead to revoke it.
 
 ## Updating
 

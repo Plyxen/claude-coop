@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import { branchName, createHub } from '../src/hub/app.js'
 import { sqliteDatabase } from '../src/hub/sqlite.js'
@@ -9,11 +10,13 @@ async function setup({ maxWorkers = 3 } = {}) {
   let clock = Date.parse('2026-10-26T12:00:00Z')
   const db = await sqliteDatabase()
   const hub = createHub({ db, leadToken: LEAD, leadName: 'boss', hubName: 'testcrew', maxWorkers, now: () => clock })
+  // Changes carry a fresh request id, like the current client's.
   async function call(token, method, path, body, headers = {}) {
+    const fresh = method === 'GET' ? {} : { 'x-coop-request-id': randomUUID(), 'x-coop-timestamp': String(clock) }
     const response = await hub.fetch(
       new Request(`http://hub${path}`, {
         method,
-        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
+        headers: { ...fresh, ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     )
@@ -33,7 +36,9 @@ async function setup({ maxWorkers = 3 } = {}) {
 
 test('health is public, everything else needs a valid token', async () => {
   const { call } = await setup()
-  assert.equal((await call(null, 'GET', '/health')).body.hub, 'testcrew')
+  const health = await call(null, 'GET', '/health')
+  assert.equal(health.body.ok, true)
+  assert.equal(JSON.stringify(health.body).includes('testcrew'), false, "the crew's name isn't public")
   assert.equal((await call(null, 'GET', '/v1/me')).status, 401)
   assert.equal((await call('coop_wrong', 'GET', '/v1/me')).status, 401)
   const me = await call(LEAD, 'GET', '/v1/me')
@@ -157,12 +162,12 @@ test('permission requests go to the lead and the verdict back to the worker', as
   assert.equal(request.data.tool_name, 'Bash')
 
   assert.equal((await call(bob, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'abcde', behavior: 'allow' })).status, 403)
-  assert.equal((await call(LEAD, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'zzzzz', behavior: 'allow' })).status, 404)
-  assert.equal((await call(LEAD, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'abcde', behavior: 'allow' })).status, 200)
+  assert.equal((await call(LEAD, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'zzzzz', behavior: 'deny' })).status, 404)
+  assert.equal((await call(LEAD, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'abcde', behavior: 'deny' })).status, 200)
   assert.equal((await call(LEAD, 'POST', '/v1/permissions/verdict', { worker: 'bob', request_id: 'abcde', behavior: 'deny' })).status, 409)
 
   const verdict = (await events(bob)).find((e) => e.type === 'permission_verdict')
-  assert.deepEqual(verdict.data, { request_id: 'abcde', behavior: 'allow' })
+  assert.deepEqual(verdict.data, { request_id: 'abcde', behavior: 'deny' })
 })
 
 test('removing a worker revokes the token and frees their tasks', async () => {

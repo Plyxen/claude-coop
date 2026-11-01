@@ -14,6 +14,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { VERSION } from '../src/hub/app.js'
 import { startNodeHub } from '../src/hub/node.js'
+import { toolsFor } from '../src/mcp/tools.js'
 
 const BIN = fileURLToPath(new URL('../bin/coop.js', import.meta.url))
 const LEAD_TOKEN = 'coop_crew-test-lead-token-0123456789'
@@ -130,7 +131,7 @@ test('a lead and two workers run a task end to end', async () => {
   assert.match((await bob.channel('task_changes_requested')).params.content, /Add a header row/)
   await bob.call('coop_submit', { id: 1, summary: 'Header row added' })
   await lead.channel('task_submitted')
-  await lead.call('coop_review', { id: 1, decision: 'approve' })
+  assert.match((await lead.call('coop_review', { id: 1, decision: 'approve' })).text, /done on the board; merging it is a separate step/)
   assert.match((await bob.channel('task_approved')).params.content, /Approved your task #1/)
   assert.match((await anna.channel('task_approved')).params.content, /Pull the latest main/, 'other workers hear about merged work')
 
@@ -176,6 +177,7 @@ test('permission prompts on a worker are relayed to the lead and answered', asyn
   assert.match(request, /\[worker bob\] asks permission to use Bash: Run the test suite/)
   assert.match(request, /npm test/)
   assert.match(request, /Request id: qwert/)
+  assert.match(request, /may not be waiting, and may already have run/, "the lead isn't told the task is paused")
 
   const verdict = new Promise((resolve) => {
     const previous = bob.fallbackNotificationHandler
@@ -184,9 +186,30 @@ test('permission prompts on a worker are relayed to the lead and answered', asyn
       return previous?.(notification)
     }
   })
-  const answer = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'allow' } })
+  // The lead's Claude can't say yes, whatever it is told. It can say no.
+  const refused = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'allow' } })
+  assert.equal(refused.isError, true)
+  assert.match(refused.content[0].text, /coop approve bob qwert/)
+  const answer = await lead.callTool({ name: 'coop_permission', arguments: { worker: 'bob', request_id: 'qwert', decision: 'deny' } })
   assert.equal(answer.isError, undefined)
-  assert.deepEqual(await verdict, { request_id: 'qwert', behavior: 'allow' })
+  assert.deepEqual(await verdict, { request_id: 'qwert', behavior: 'deny' })
+})
+
+test("approving a task doesn't announce a merge when there may be nothing to merge", async () => {
+  const review = toolsFor('lead').find((tool) => tool.name === 'coop_review')
+  const client = { taskAction: async () => ({ task: { title: 'Check something' } }) }
+  assert.match(await review.run({ client }, { id: 1, decision: 'approve' }), /done on the board\. If it left a branch/)
+})
+
+test('coop approve needs a person at a terminal, and the hub needs the passphrase', async () => {
+  // Spawned here without a terminal, the way a Claude's shell tool runs things.
+  await assert.rejects(coop('approve', 'bob', 'abcde', '--profile', 'boss'), /needs a person at a terminal/)
+  await assert.rejects(coop('approvals', 'setup', '--profile', 'boss'), /needs a person at a terminal/)
+  // A status that doesn't exist is caught here, instead of landing in the audit log as refused input.
+  await assert.rejects(coop('permissions', '--status', 'all', '--profile', 'boss'), /Unknown status "all"\. Use one of: pending, allowed, denied, expired/)
+  // And the MCP server has no way to mint a credential into the conversation.
+  const tools = (await sessions[0].listTools()).tools.map((t) => t.name)
+  assert.ok(!tools.includes('coop_invite'))
 })
 
 test('coop_inbox works for sessions without channels', async () => {

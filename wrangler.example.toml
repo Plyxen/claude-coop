@@ -7,6 +7,8 @@ compatibility_date = "2026-09-01"
 COOP_LEAD_NAME = "lead"        # your crew name as the lead
 COOP_HUB_NAME = "my-crew"      # the crew's name, shown on the board
 COOP_MAX_WORKERS = "8"
+COOP_TOKEN_TTL_DAYS = "90"     # how long new tokens last, 0 for no expiry
+COOP_RETENTION_DAYS = "90"     # how long the hub keeps history, 0 for always
 
 # The lead token is a secret: npx wrangler@4 secret put COOP_LEAD_TOKEN
 

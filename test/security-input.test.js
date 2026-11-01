@@ -302,6 +302,19 @@ test('the board and the crew have upper bounds', async () => {
 
 // --- audit log, alerts, errors ------------------------------------------------
 
+test('the audit log follows a task through hand-in, review and release, and a removal is called one', async () => {
+  const { call, invite, audit } = await hubForTest()
+  const bob = await invite('bob')
+  const { body } = await call(LEAD, 'POST', '/v1/tasks', { title: 'x', to: 'bob' })
+  const steps = [[bob, 'claim'], [bob, 'submit'], [LEAD, 'changes'], [bob, 'submit'], [LEAD, 'approve'], [LEAD, 'reopen'], [bob, 'claim'], [bob, 'release']]
+  for (const [who, action] of steps) assert.equal((await call(who, 'POST', `/v1/tasks/${body.task.id}/${action}`, { note: 'x' })).status, 200, action)
+  const types = new Set((await audit()).map((e) => e.type))
+  for (const type of ['task_submitted', 'task_changes_requested', 'task_approved', 'task_reopened', 'task_released']) assert.ok(types.has(type), `no ${type} in ${[...types]}`)
+
+  await call(LEAD, 'DELETE', '/v1/members/bob')
+  assert.match(JSON.stringify((await call(LEAD, 'GET', '/v1/board')).body), /bob was removed from the crew/)
+})
+
 test('the audit log records who did what, and holds no secrets', async () => {
   const { call, invite, audit, setPassphrase, ask, answer } = await hubForTest()
   const bob = await invite('bob')

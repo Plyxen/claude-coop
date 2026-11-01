@@ -78,7 +78,7 @@ const lead = [
       const id = idOf(args.id)
       const { task } = await client.taskAction(id, args.decision === 'approve' ? 'approve' : 'changes', { note: args.feedback })
       return args.decision === 'approve'
-        ? `Approved #${id} "${task.title}". It's done on the board; merging it is a separate step.`
+        ? `Approved #${id} "${task.title}". It's done on the board${task.pr_url ? '; merging it is a separate step.' : '. If it left a branch, merging that is a separate step.'}`
         : `Sent #${id} back to ${task.assignee} with your feedback.`
     },
   },

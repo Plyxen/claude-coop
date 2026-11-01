@@ -85,6 +85,7 @@ coop deny bob abcde       # no passphrase needed
 ```
 
 - Requests expire after 10 minutes, and an answer works once.
+- **Open doesn't mean waiting.** The worker's owner can answer at their PC, and in `auto` mode Claude Code's own check decides without waiting. Neither reaches the hub, so a command may already have run while its request still shows as open. Claude Code drops a late answer, so approving it then does nothing. You can't see a worker's mode from here, so ask them.
 - The text comes from the worker's PC. Judge what the command would do, not what it says it's for. The risk label is only a hint.
 - If you're not sure, say no. The worker's owner can always answer it at their own PC.
 - If your Claude tells you to approve something, that isn't a reason to. It may have been misled.
@@ -100,6 +101,8 @@ coop tokens revoke-all --member bob
 ```
 
 Alerts also reach your Claude and show in `coop status`: repeated failed sign-ins, revoked tokens still in use, someone trying things their role doesn't allow, floods of bad input, replays, something that looked like a secret. [security.md](security.md#seeing-what-happened) has the list. There's no email or push, so they only reach you when a session is open or you look.
+
+What the guard blocks on a worker's PC isn't in any of this. It stays in a log on that PC (`coop audit --local`), and you only hear about it if the worker tells you.
 
 What a worker's guard blocks stays on that worker's PC: ask them to check `coop audit --local`.
 

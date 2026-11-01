@@ -65,14 +65,18 @@ How much your Claude can do without asking depends on the permission mode (`coop
 
 | Mode | What happens |
 | --- | --- |
-| `auto` (default) | Claude Code's safety classifier approves routine actions and blocks risky ones. |
-| `acceptEdits` | File edits go through, and commands need approval. |
-| `manual` | Everything needs approval. |
+| `auto` (default) | Claude Code's safety classifier approves routine actions and blocks risky ones. Nothing waits for a person, so it's the only mode that can run with nobody around. |
+| `acceptEdits` | File edits go through. Commands, and coop's tools that carry text (messages, progress notes, hand-ins), need approval. |
+| `manual` | Everything needs approval, apart from commands Claude Code can tell only read, like `node --version`. |
 | `bypassPermissions` | No checks at all. `coop start` refuses it unless you also pass `--insecure-dev-mode`, which turns coop's checks off too. Only for a throwaway virtual machine. |
 
-If your plan doesn't include auto mode, Claude Code says so at startup. Use `--permission-mode acceptEdits` instead.
+If your plan doesn't include auto mode, Claude Code says so at startup. Use `--permission-mode acceptEdits` instead. Commands then wait for an answer from you or the lead, so someone has to be around.
 
-When your Claude needs approval, the prompt shows in your window **and** is forwarded to the lead. The lead's Claude can show it to its person and refuse it, but only that person can approve it, with a passphrase typed at their own terminal. An approval expires after 10 minutes and works once. Whichever answer comes first wins, and your own prompt stays open until then. To keep approvals to yourself, start with `coop start --no-relay`; prompts then wait for you at your PC.
+In every mode, `coop_status`, `coop_task`, `coop_inbox` and `coop_claim` don't ask. They send nothing off your PC but a task number, and the hub decides what they may do.
+
+Shift+Tab changes the mode of a running session. The lead can't see which mode you're in.
+
+When your Claude needs approval, the prompt shows in your window **and** is forwarded to the lead. The lead's Claude can show it to its person and refuse it, but only that person can approve it, with a passphrase typed at their own terminal. An approval expires after 10 minutes and works once. Whichever answer comes first wins, and your own prompt stays open until then. An answer you give in your window doesn't reach the hub, so the lead may still see that request as open. In `auto` mode, requests can reach the lead too, but the command doesn't wait for them. To keep approvals to yourself, start with `coop start --no-relay`; prompts then wait for you at your PC.
 
 ## Using your own Claude at the same time
 

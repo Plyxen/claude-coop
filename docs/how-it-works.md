@@ -76,7 +76,9 @@ The MCP server's requests count as a heartbeat, and it polls all the time. One-o
 
 A worker's channel declares Claude Code's `claude/channel/permission` capability. When Claude Code would show a permission prompt on the worker's PC, it also sends it to the coop server, which forwards it to the hub. The hub adds the worker's current task, a risk label and a 10-minute expiry. The lead's Claude shows it to the lead's user.
 
-The answer travels back the same way, and the prompt stays open on the worker's PC the whole time. Whichever answer arrives first wins. Turn it off with `coop start --no-relay`.
+The answer travels back the same way, and the prompt stays open on the worker's PC the whole time. Whichever answer arrives first wins, and Claude Code drops the other. Turn it off with `coop start --no-relay`.
+
+The hub only knows about answers that came through it. One given on the worker's PC doesn't reach it. In `auto` mode, requests can still arrive while Claude Code's own check decides and the command goes ahead without waiting (seen on Claude Code 2.1.316). So `pending` only means no answer has come through the hub, not that anything is waiting. The worker's mode isn't sent either, and it can change mid-session (Shift+Tab), so the lead can't tell which requests are really holding something.
 
 - **The lead's Claude can refuse** (`coop_permission`), **but it can't approve.** Approving is `coop approve` in a terminal, with a passphrase the hub checks. The Claude's lead token alone gets refused.
 - **An answer works once**, for that worker and that request, inside its time. The hub checks all of that atomically, and refuses and logs anything else.

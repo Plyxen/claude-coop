@@ -43,7 +43,7 @@ A repeat of the same id, from the same member, within a day, doesn't run again: 
 | `POST /v1/members` | lead | Invite: `{name, role?, device?, approval_key?}`. Returns `{name, role, token, token_id, rotated, expires_at}`. `role` is `worker` or `observer`. `device` adds a token and leaves the others working. Otherwise, inviting an existing member replaces their tokens. `approval_key` is needed once a passphrase is set |
 | `DELETE /v1/members/:name` | lead | Remove someone: their tokens and open requests stop, and held tasks go back to the pool |
 | `POST /v1/permissions` | worker | Relay a permission prompt: `{request_id, tool_name, description, input_preview, cwd?}`. Returns `{id, expires_at, risk}`, or `{duplicate: true, expires_at}` for a resend while it's open. The hub works out the task and the risk label itself |
-| `GET /v1/permissions?status=S&limit=N` | lead, worker | `pending` (default), `allowed`, `denied`, `expired`. Workers see their own |
+| `GET /v1/permissions?status=S&limit=N` | lead, worker | `pending` (default), `allowed`, `denied`, `expired`. `pending` means no answer came through the hub: one given on the worker's PC isn't reported. Workers see their own |
 | `POST /v1/permissions/verdict` | lead | `{worker, request_id, behavior, approval_key?}`. `behavior` is `allow` or `deny`. `allow` needs `approval_key`. Answers work once |
 | `GET /v1/tokens?member=NAME` | all | Token metadata, never hashes. The lead sees everyone's. Others see their own |
 | `POST /v1/tokens/rotate` | worker, observer | Replace the token this request used. Returns `{token, id, expires_at}` |

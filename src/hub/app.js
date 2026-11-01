@@ -739,7 +739,7 @@ export function createHub({
       [`UPDATE tasks SET status = 'open', assignee = NULL, updated_at = ? WHERE assignee = ? AND status IN (${marks(HELD)})`, [at, name, ...HELD]],
     ])
     await audit(ctx, 'member_removed', { target: name, detail: { released: held.map((t) => t.id) } })
-    await addEvent(me, 'member_removed', { text: `${name} left the crew`, data: { name, released: held.map((t) => t.id) } })
+    await addEvent(me, 'member_removed', { text: `${name} was removed from the crew`, data: { name, released: held.map((t) => t.id) } })
     return { removed: name, released: held.map((t) => t.id) }
   }
 
@@ -922,7 +922,7 @@ export function createHub({
       text: note_,
       data: { ...taskData(updated), previous_status: task.status, previous_assignee: task.assignee },
     })
-    if (action === 'claim' || action === 'assign' || action === 'approve' || action === 'cancel') await audit(ctx, spec.event, { target: updated.assignee, detail: { task: id } })
+    if (['claim', 'assign', 'submit', 'changes', 'approve', 'release', 'cancel', 'reopen'].includes(action)) await audit(ctx, spec.event, { target: updated.assignee, detail: { task: id } })
     return { task: updated }
   }
 

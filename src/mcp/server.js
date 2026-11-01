@@ -292,7 +292,7 @@ export function createCoopServer({
       if (error.status === 401) {
         log(`the hub refused this token: ${error.message}`)
         stopped = true
-        await channel(`[coop] This crew session has stopped: the hub no longer accepts your token (${error.message}). Stop working on crew tasks and tell your user. They can get a new invite from the lead and run coop join.`, { event: 'stopped', from: 'coop', from_role: 'system' })
+        await channel(`[coop] Stopped: the hub no longer accepts your token (${error.message}). Stop working on crew tasks and tell your user. They can get a new invite from the lead and run coop join.`, { event: 'stopped', from: 'coop', from_role: 'system' })
         return
       }
       if (failures === 1 || failures % 10 === 0) log(`can't reach the hub: ${error.message}`)

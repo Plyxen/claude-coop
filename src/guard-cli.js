@@ -67,7 +67,8 @@ export function runGuard(args) {
     const problem = prePushProblem(readInput(), { cwd: process.cwd(), remote: rest[0] })
     if (!problem) return 0
     remember('pre-push', 'worker', problem)
-    writeSync(2, `coop guard stopped this push: ${problem}.\nIf you're a person and you mean it: git push --no-verify\n`)
+    // No way past it in this message: whoever it just stopped may well be a Claude.
+    writeSync(2, `coop guard stopped this push: ${problem}.\nIf that's wrong, tell a person: coop's troubleshooting guide covers it.\n`)
     return BLOCK
   }
   writeSync(2, 'coop guard: unknown check.\n')

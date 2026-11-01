@@ -371,12 +371,15 @@ async function approvals(args) {
 
 async function permissions(args) {
   const opts = options(args, { status: { type: 'string' } })
+  const statuses = ['pending', 'allowed', 'denied', 'expired']
+  if (opts.status && !statuses.includes(opts.status)) throw new Error(`Unknown status "${cleanText(opts.status)}". Use one of: ${statuses.join(', ')}`)
   const { requests } = await hubClient(config.getProfile(opts.profile)).permissions(opts.status ?? 'pending')
   if (!requests.length) {
-    console.log(opts.status ? `No ${cleanText(opts.status)} requests.` : 'No open permission requests.')
+    console.log(opts.status ? `No ${cleanText(opts.status)} requests.` : 'No open permission requests. coop permissions --status expired shows the ones nobody answered in time.')
     return
   }
   for (const request of requests) console.log(`${describeRequest(request)}\n`)
+  if ((opts.status ?? 'pending') === 'pending') console.log("Open means no answer has come through the hub. The person at that PC, or Claude Code's own check in auto mode, may already have answered it, and the command may already have run.")
 }
 
 function describeRequest(r) {
@@ -406,7 +409,7 @@ async function approve(args) {
   const { requests } = await client.permissions('pending')
   const request = requests.find((r) => r.worker === worker && r.request_id === id)
   if (!request) throw new Error(`No open request ${cleanText(id)} from ${cleanText(worker)}: it may have expired or been answered. coop permissions lists the open ones.`)
-  console.log(`\nThis runs on ${cleanText(worker)}'s PC if you approve it. The text comes from that PC, so judge what it would do, not what it says:\n\n${describeRequest(request)}\n`)
+  console.log(`\nIf this is still waiting, it runs on ${cleanText(worker)}'s PC when you approve it. It may already have been answered there, or by auto mode. The text comes from that PC, so judge what it would do, not what it says:\n\n${describeRequest(request)}\n`)
   const passphrase = await promptHidden('Passphrase to approve (Ctrl+C to cancel): ')
   await client.permissionVerdict({ worker, request_id: id, behavior: 'allow', approval_key: await deriveApprovalKey(passphrase, state.salt, state.kdf) })
   console.log(`Approved. ${cleanText(worker)}'s Claude has been told.`)

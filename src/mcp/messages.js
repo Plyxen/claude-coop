@@ -61,6 +61,7 @@ function leadText(event) {
         `Request id: ${d.request_id}. Show this to your user. You can't approve it: only they can, by running this in their own terminal:`,
         `  coop approve ${event.actor} ${d.request_id}`,
         `You may refuse it with coop_permission (worker "${event.actor}", request_id "${d.request_id}", decision "deny") if your user says no.`,
+        `It may not be waiting, and may already have run: the person at that PC, or Claude Code's own check in auto mode, can answer first, and the hub doesn't hear about that. So don't tell your user the task is paused.`,
       ]
         .filter(Boolean)
         .join('\n')

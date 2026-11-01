@@ -36,6 +36,7 @@ coop deny bob abcde       # no passphrase needed
 
 - Until a passphrase is set, requests can only be refused.
 - A request can be answered once, and only within 10 minutes. After that it's refused, and the worker's own prompt stays open on their PC.
+- **Open doesn't mean waiting.** The person at the worker's PC can answer there, and in `auto` mode Claude Code's own check decides without waiting. Neither reaches the hub, so a command may already have run while its request still shows as open. Claude Code drops a late answer, so approving it then does nothing.
 - The text of a request comes from the worker's PC. Judge what the command would do, not what it says it's for. The risk label is a hint, not a check, and no label ever gets a request approved.
 - Five wrong passphrases lock approvals for up to 15 minutes. Refusing still works.
 - **Never type the passphrase into a Claude conversation.** That would give it to the thing it's there to stop.
@@ -102,7 +103,7 @@ Old events, audit entries, permission requests and finished tasks are deleted af
 
 ## Seeing what happened
 
-`coop audit` shows the security log: sign-ins after being away, failed sign-ins, tokens, members, roles, task claims and assignments, permission requests and answers, refused input, replays, and alerts. `coop audit --alerts` shows only alerts. Alerts also reach the lead's Claude and appear in `coop status`:
+`coop audit` shows the security log: sign-ins after being away, failed sign-ins, tokens, members, roles, task claims, assignments, hand-ins and reviews, permission requests and answers, refused input, replays, and alerts. It leaves out messages (they're in the crew's history), requests that expire unanswered (`coop permissions --status expired`), answers given on a worker's PC, and what the guard blocks there (`coop audit --local` on that PC). `coop audit --alerts` shows only alerts. Alerts also reach the lead's Claude and appear in `coop status`:
 
 | Alert | When |
 | --- | --- |

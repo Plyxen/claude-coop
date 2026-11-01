@@ -5,7 +5,8 @@ Start with `coop doctor` in the project folder. It checks Node, Claude Code, you
 ## The worker doesn't react to new tasks
 
 - **Was it started with `coop start`?** Plain `claude` doesn't load the channel.
-- **Did you see the channels notice at startup?** A line like `Channels (experimental) messages from server:coop inject directly in this session` should appear under the banner. If there's a warning instead:
+- **Did you see the channels notice at startup?** A line like `Channels (experimental) messages from server:coop inject directly in this session` should appear under the banner. If there's a warning as well or instead:
+  - *`server:coop · no MCP server configured with that name`*: a false alarm. It shows on Claude Code 2.1.316 with messages arriving fine, so ignore it if `/mcp` shows `coop` as connected.
   - *blocked by org policy*: on a Team or Enterprise plan, an admin must [enable channels](https://code.claude.com/docs/en/channels#enterprise-controls).
   - Channels need Claude Code 2.1.80+ and a claude.ai or Console login (not Bedrock, Vertex or Foundry). Update with `claude update`.
 - **Is the window still open?** Closing it stops the worker. Tasks wait on the hub until it's back.
@@ -91,13 +92,20 @@ The pre-push hook refused a protected branch, a tag, or a commit that adds somet
 | Message | Why, and what to do |
 | --- | --- |
 | *Refusing permission mode bypassPermissions* | It removes every check, while tasks come from someone else. Pick another mode. `--insecure-dev-mode` overrides it, for throwaway virtual machines only. |
+| *Unknown permission mode "default"* | Claude Code 2.1.316 calls that mode `manual`. |
 | *Refusing plain http* | Your token would cross the internet unencrypted. Use https or a private network like Tailscale. |
 | *Refusing to listen on 0.0.0.0* | This server speaks plain http. Use your Tailscale address, or stay on 127.0.0.1 behind an https tunnel or proxy. With a firewall in front, add `--public-bind`. See [self-hosting.md](self-hosting.md). |
 | *Claude Code's sandbox isn't available on native Windows* | `--sandbox` would silently do nothing there, so coop refuses. Use WSL2, a virtual machine, or a separate user account. |
 
 ## The worker keeps asking for permission
 
-Pick a mode that fits (`coop start --permission-mode auto` or `acceptEdits`). Prompts are forwarded to the lead unless you used `--no-relay`. If your plan doesn't have auto mode, Claude Code says so at startup: use `acceptEdits`.
+That's its permission mode. `manual` asks before nearly everything, and `acceptEdits` asks for commands and for coop's tools that carry text. `auto` (`coop start --permission-mode auto`, the default) doesn't wait for anyone. If your plan doesn't have auto mode, Claude Code says so at startup: use `acceptEdits`, and someone has to answer its prompts, in that window or with `coop approve`. Shift+Tab changes the mode of a running session. Prompts are forwarded to the lead unless you used `--no-relay`.
+
+Claude Code doesn't ask about commands it can tell only read, like `node --version`. It does ask about ones it can't check, like `node -e`, because coop keeps a worker's reads inside the project.
+
+## A permission request is open, but the command already ran
+
+`coop permissions` lists what hasn't been answered through the hub. An answer given on the worker's PC, or a decision by Claude Code's own check in `auto` mode, doesn't reach the hub, so the request stays listed until it expires. Claude Code drops a late answer, so approving it then does nothing. If you need to know whether something is really waiting, ask the worker's owner.
 
 ## Two workers edited the same files
 

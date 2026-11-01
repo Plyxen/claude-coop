@@ -4,7 +4,7 @@
 
 Security hardening. See [security guarantees](docs/security-guarantees.md) for what is and isn't enforced, and the [threat model](docs/threat-model.md).
 
-**Upgrade in this order:** deploy the hub, then the lead runs `coop update` and `coop approvals setup`, then workers run `coop update`. Older workers keep working against the new hub. An older lead client can't allow, invite or remove until it's updated.
+**Upgrade in this order:** deploy the hub, then the lead runs `coop update` and `coop approvals setup`, then workers run `coop update`. Older workers keep working against the new hub. An older lead client can't allow or refuse permission requests, invite or remove until it's updated.
 
 Breaking changes:
 
@@ -17,6 +17,7 @@ Breaking changes:
 - Sensitive API calls need `x-coop-request-id` and `x-coop-timestamp`. API errors carry a `code`.
 - Stricter branch names, reserved member names, and lead tokens of at least 24 characters.
 - `coop start` adds guard settings, and installs a pre-push hook for workers. Worker file tools are limited to the project, common dangerous commands are blocked, and pushes are scanned for secrets.
+- Workers don't get a prompt for `coop_status`, `coop_task`, `coop_inbox` or `coop_claim`, in any mode. They send nothing off the PC but a task number, and the hub decides what they may do. Tools that carry text still ask in `acceptEdits` and `manual`.
 - The hub limits each member to 120 changes a minute, on top of hourly limits per kind of change.
 - The client refuses to send a token to an https hub if `NODE_TLS_REJECT_UNAUTHORIZED=0` is set. Use `NODE_EXTRA_CA_CERTS` for a private certificate authority.
 

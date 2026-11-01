@@ -92,7 +92,7 @@ export function buildClaudeArgs(
   }
   const isWorker = profile.role === 'worker'
   const mode = permissionMode ?? (isWorker ? profile.permissionMode ?? 'auto' : null)
-  if (mode && !PERMISSION_MODES.includes(mode)) throw new Error(`Unknown permission mode "${mode}". Use one of: ${PERMISSION_MODES.join(', ')}`)
+  if (mode && !PERMISSION_MODES.includes(mode)) throw new Error(`Unknown permission mode "${mode}". Use one of: ${PERMISSION_MODES.filter((name) => name !== 'bypassPermissions').join(', ')}`)
   checkLaunchSafety(mode, extraArgs, insecureDevMode)
   const settings = insecureDevMode
     ? null

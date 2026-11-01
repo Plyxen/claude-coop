@@ -258,6 +258,11 @@ function pushProblem(command) {
   return null
 }
 
+// coop's tools that send nothing off the PC but a task number, and the hub decides
+// what they may do. Asking about them protects nothing, and a worker with nobody
+// at its PC would stop at its first step. The tools that carry text still ask.
+const WORKER_ALLOWED_TOOLS = ['coop_status', 'coop_task', 'coop_inbox', 'coop_claim'].map((tool) => `mcp__coop__${tool}`)
+
 // What Claude Code gets from `coop start --settings`. Deny rules are enforced by
 // Claude Code itself, whatever Claude decides, though it documents that Bash
 // patterns can be side-stepped: that's why they back up the hook, not replace it.
@@ -279,6 +284,7 @@ export function guardSettings({ role, nodePath, coopBin, profile, hookFields = {
   if (role === 'worker') {
     settings.autoMode = { classifyAllShell: true }
     settings.permissions.blockReadsOutsideWorkingDirectories = true
+    settings.permissions.allow = WORKER_ALLOWED_TOOLS
   }
   if (sandbox) {
     settings.sandbox = {
@@ -316,7 +322,7 @@ export function installPrePush({ cwd, nodePath, coopBin }) {
   if (!relative) return { status: 'no-repo' }
   const file = path.resolve(cwd, relative)
   const forward = (value) => value.replace(/\\/g, '/')
-  const content = `#!/bin/sh\n${HOOK_MARKER}: installed by coop start, keeps worker Claudes off protected branches.\n# A person who really means it can use git push --no-verify.\nexec "${forward(nodePath)}" "${forward(coopBin)}" guard pre-push "$@"\n`
+  const content = `#!/bin/sh\n${HOOK_MARKER}: installed by coop start, keeps worker Claudes off protected branches.\n# If it's wrong, coop's troubleshooting guide says what a person can do.\nexec "${forward(nodePath)}" "${forward(coopBin)}" guard pre-push "$@"\n`
   if (existsSync(file)) {
     const current = readFileSync(file, 'utf8')
     if (!current.includes(HOOK_MARKER)) return { status: 'foreign-hook', file }

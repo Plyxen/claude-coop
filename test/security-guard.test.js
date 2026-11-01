@@ -9,6 +9,7 @@ import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { commandProblem, guardSettings, installPrePush, prePushProblem, prePushStatus, toolProblem } from '../src/guard.js'
 import { buildClaudeArgs, hasStrictHooks, quoteForCmd } from '../src/launch.js'
+import { toolsFor } from '../src/mcp/tools.js'
 import { lexicalPathProblem, pathProblem } from '../src/paths.js'
 
 const BIN = fileURLToPath(new URL('../bin/coop.js', import.meta.url))
@@ -253,6 +254,16 @@ test('settings: a hook runs before every file and shell tool', () => {
   assert.equal(settings.autoMode.classifyAllShell, true)
 })
 
+test('settings: only the coop tools that send no text off the PC skip the prompt', () => {
+  const settingsFor = (role) => guardSettings({ role, nodePath: 'node', coopBin: 'coop', profile: 'p' })
+  const skips = ['coop_status', 'coop_task', 'coop_inbox', 'coop_claim']
+  const asks = ['coop_progress', 'coop_submit', 'coop_release', 'coop_send']
+  // A new worker tool has to be put on one list or the other.
+  assert.deepEqual(toolsFor('worker').map((tool) => tool.name).sort(), [...skips, ...asks].sort())
+  assert.deepEqual(settingsFor('worker').permissions.allow, skips.map((tool) => `mcp__coop__${tool}`))
+  assert.equal(settingsFor('lead').permissions.allow, undefined)
+})
+
 test('settings: newer Claude Code gets exec form, and a hook failure blocks', () => {
   const settings = guardSettings({ role: 'worker', nodePath: '/n', coopBin: '/c', profile: 'p', hookFields: { execForm: true, blockOnFailure: true } })
   const hook = settings.hooks.PreToolUse[0].hooks[0]
@@ -283,6 +294,8 @@ test('coop start refuses to turn the safety checks off', () => {
     assert.throws(() => buildClaudeArgs(LEADER, { extraArgs }), /Refusing/, extraArgs.join(' '))
   }
   assert.throws(() => buildClaudeArgs(WORKER, { permissionMode: 'whatever' }), /Unknown permission mode/)
+  // What it suggests instead doesn't include the one that turns the checks off.
+  assert.throws(() => buildClaudeArgs(WORKER, { permissionMode: 'default' }), (error) => /manual/.test(error.message) && !/bypassPermissions/.test(error.message))
   assert.throws(() => buildClaudeArgs({ ...WORKER, role: 'observer' }), /Observers/)
 })
 
@@ -378,6 +391,9 @@ test('pre-push check: installed for real, git itself stops the push', () => {
   const pushMain = spawnSync('git', ['push', 'origin', 'main'], { cwd: clone, encoding: 'utf8' })
   assert.notEqual(pushMain.status, 0)
   assert.match(pushMain.stderr, /coop guard stopped this push/)
+  // Neither what it says nor the hook file hands whoever it stopped the way past it.
+  assert.doesNotMatch(pushMain.stderr, /no-verify/)
+  assert.doesNotMatch(readFileSync(installed.file, 'utf8'), /no-verify/)
   const pushMapped = spawnSync('git', ['push', 'origin', 'HEAD:refs/heads/main'], { cwd: clone, encoding: 'utf8' })
   assert.notEqual(pushMapped.status, 0)
   const before = git(remote, 'rev-parse', 'main')
